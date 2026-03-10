@@ -8,6 +8,7 @@
     body { font-family: system-ui, sans-serif; margin: 2rem; }
     form { display: grid; gap: .75rem; max-width: 800px; margin-bottom: 2rem; }
     input, select, button { padding: .7rem; font-size: 1rem; }
+    .job-action { padding: .3rem .5rem; font-size: .85rem; margin-right: .35rem; }
     table { border-collapse: collapse; width: 100%; }
     th, td { border: 1px solid #ddd; padding: .5rem; text-align: left; vertical-align: top; }
     th { background: #f5f5f5; }
@@ -47,6 +48,8 @@
         <th>Final Parent</th>
         <th>Stage</th>
         <th>Hash</th>
+        <th>Last Error</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -58,6 +61,15 @@
         <td>{{ job.final_parent }}</td>
         <td>{{ job.staging_actual or job.staging_preference }}</td>
         <td>{{ job.qbt_hash or '-' }}</td>
+        <td>{{ job.last_error or '-' }}</td>
+        <td>
+          {% if job.state == "error" %}
+          <button class="job-action" type="button" onclick="retryJob('{{ job.id }}')">Retry</button>
+          {% endif %}
+          {% if job.is_terminal %}
+          <button class="job-action" type="button" onclick="deleteJob('{{ job.id }}')">Delete</button>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -80,6 +92,25 @@
       }
       location.reload();
     });
+
+    async function retryJob(jobId) {
+      const res = await fetch(`/jobs/${jobId}/retry`, { method: 'POST' });
+      if (!res.ok) {
+        alert(await res.text());
+        return;
+      }
+      location.reload();
+    }
+
+    async function deleteJob(jobId) {
+      if (!confirm('Delete this terminal job from the intake list?')) return;
+      const res = await fetch(`/jobs/${jobId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        alert(await res.text());
+        return;
+      }
+      location.reload();
+    }
   </script>
 </body>
 </html>

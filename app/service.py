@@ -62,6 +62,55 @@ class JobService:
             raise RuntimeError(f"Failed to submit to qBittorrent: {error_text}") from exc
         return job
 
+    def retry_job(self, db: Session, *, job_id: str) -> Job:
+        job = db.get(Job, job_id)
+        if not job:
+            raise LookupError("Job not found")
+        if job.state != "error":
+            raise ValueError("Only jobs in error state can be retried")
+
+        staging_root = job.staging_root_actual or job.staging_root_initial or self._root_for_preference(job.staging_preference)
+        job.is_terminal = False
+        job.last_error = None
+        job.updated_at = datetime.utcnow()
+        job.state = "retrying"
+
+        try:
+            if job.qbt_hash and self.qbt.get_torrent(job.qbt_hash) is None:
+                job.qbt_hash = None
+
+            if not job.qbt_hash:
+                self.qbt.add_torrent(
+                    magnet_uri=job.magnet_uri,
+                    save_path=staging_root,
+                    tags=[self.settings.managed_tag, job.unique_tag],
+                    category=self.settings.intake_category,
+                )
+                self._resolve_hash_for_job(db, job)
+                return job
+
+            self._mark(job, "downloading")
+            db.add(job)
+            db.commit()
+            db.refresh(job)
+            return job
+        except Exception as exc:
+            error_text = str(exc).strip() or repr(exc)
+            self.logger.exception("Failed to retry job %s", job.id)
+            self._mark(job, "error", error=f"retry failed: {error_text}")
+            db.add(job)
+            db.commit()
+            raise RuntimeError(f"Failed to retry job: {error_text}") from exc
+
+    def delete_job(self, db: Session, *, job_id: str) -> None:
+        job = db.get(Job, job_id)
+        if not job:
+            raise LookupError("Job not found")
+        if not job.is_terminal:
+            raise ValueError("Only terminal jobs can be deleted")
+        db.delete(job)
+        db.commit()
+
     def _root_for_preference(self, preference: str) -> str:
         return self.settings.local_staging_root if preference == "local" else self.settings.nas_staging_root
 
