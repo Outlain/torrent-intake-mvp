@@ -111,6 +111,7 @@ See `portainer-stack.example.yml` and adjust host paths, qBittorrent endpoint, a
 - `DELETE /jobs/{job_id}` delete terminal job from intake DB
 - `GET /qbt/categories` list qBittorrent categories
 - `GET /qbt/final-path-suggestions` list known qB save path suggestions
+- `GET /fs/final-path-suggestions` list live directory suggestions inside the configured final root
 - `POST /events/qbt-complete` JSON completion event
 - `POST /events/qbt-complete-form` form completion event
 - `GET /health` health endpoint
@@ -161,6 +162,7 @@ Recommended deployment model:
 - Configure qBittorrent "Run on torrent finished"
 - Use the callback to trigger intake processing immediately
 - Raise `TI_POLLING_INTERVAL_SECONDS` to `300` as a fallback safety net instead of relying on 60-second polling
+- Ensure qBittorrent and `torrent-intake` share a Docker network so qB can resolve `http://torrent-intake:8000`
 
 Example qBittorrent command when both containers share a Docker network:
 
@@ -179,6 +181,13 @@ Notes:
 - Use quotes around qB parameters because names and paths may contain spaces.
 - If you do not want callback authentication, leave `TI_COMPLETION_EVENT_TOKEN` blank and omit the `token` form field.
 - The callback triggers an immediate per-job processing pass; the background poller remains as a fallback.
+
+## Path Suggestions
+
+- The UI prefills the final path with `TI_FINAL_PARENT_PREFIX` so operators are not retyping the same root for every intake job.
+- Live final-path suggestions are scoped to that configured root and browse real directories under it.
+- If you change `TI_FINAL_PARENT_PREFIX` to another mounted root, the same prefill and live suggestion behavior follows that new root automatically.
+- Multiple simultaneous final roots are not currently supported; the app is designed around one allowed final root at a time.
 
 ## What Should Not Be Committed
 

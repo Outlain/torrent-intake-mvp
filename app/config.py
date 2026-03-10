@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     final_parent_prefix: str = "/downloads"
 
     local_max_gib: int = 200
-    polling_interval_seconds: int = 60
+    polling_interval_seconds: int = 300
     completion_grace_seconds: int = 15
     completion_event_token: str | None = None
 
