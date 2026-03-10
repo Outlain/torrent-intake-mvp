@@ -168,21 +168,13 @@ Example qBittorrent command when both containers share a Docker network:
 curl -fsS -X POST "http://torrent-intake:8000/events/qbt-complete-form" \
   -F "token=REPLACE_WITH_RANDOM_TOKEN" \
   -F "qbt_hash=%I" \
-  -F "qbt_hash_v2=%J" \
-  -F "torrent_id=%K" \
-  -F "torrent_name=%N" \
-  -F "category=%L" \
   -F "tags=%G" \
-  -F "content_path=%F" \
-  -F "root_path=%R" \
-  -F "save_path=%D" \
-  -F "files_count=%C" \
-  -F "size_bytes=%Z" \
-  -F "tracker=%T"
+  -F "content_path=%F"
 ```
 
 Notes:
 
+- Minimum practical fields are `qbt_hash` and either `tags` or `content_path`.
 - `%G` is important because intake can recover the internal `ti_job_*` tag from qB tags.
 - Use quotes around qB parameters because names and paths may contain spaces.
 - If you do not want callback authentication, leave `TI_COMPLETION_EVENT_TOKEN` blank and omit the `token` form field.

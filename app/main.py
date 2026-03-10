@@ -19,6 +19,7 @@ logging.basicConfig(
     level=logging.DEBUG if get_settings().debug else logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 service = JobService()
@@ -47,6 +48,7 @@ app = FastAPI(title=settings.ui_title, lifespan=lifespan)
 def _validate_completion_event_token(token: str | None) -> None:
     expected = settings.completion_event_token
     if expected and token != expected:
+        logger.warning("Rejected qB completion event due to invalid token")
         raise HTTPException(status_code=403, detail="Invalid completion event token")
 
 
@@ -131,6 +133,13 @@ def delete_job(job_id: str, db: Session = Depends(get_db)):
 @app.post("/events/qbt-complete")
 def qbt_complete_event(payload: CompletionEventIn, db: Session = Depends(get_db)):
     _validate_completion_event_token(payload.token)
+    logger.info(
+        "Received qB completion event qbt_hash=%s qbt_hash_v2=%s torrent_name=%s tags=%s",
+        payload.qbt_hash,
+        payload.qbt_hash_v2,
+        payload.torrent_name,
+        payload.tags,
+    )
     job = service.ingest_completion_event(
         db,
         qbt_hash=payload.qbt_hash,
