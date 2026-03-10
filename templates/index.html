@@ -39,20 +39,16 @@
       margin: 28px auto 48px;
     }
 
-    .hero {
-      display: grid;
-      grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.8fr);
-      gap: 18px;
-      align-items: stretch;
-      margin-bottom: 18px;
-    }
-
     .panel {
       background: var(--surface);
       border: 1px solid rgba(255, 255, 255, 0.55);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       backdrop-filter: blur(16px);
+    }
+
+    .hero {
+      margin-bottom: 18px;
     }
 
     .hero-copy {
@@ -114,55 +110,9 @@
       word-break: break-word;
     }
 
-    .ops-panel {
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      gap: 18px;
-      background:
-        linear-gradient(180deg, rgba(125, 52, 21, 0.08), rgba(125, 52, 21, 0)),
-        var(--surface);
-    }
-
-    .ops-title {
-      margin: 0;
-      font-size: 1.2rem;
-      letter-spacing: -0.02em;
-    }
-
-    .ops-copy {
-      margin: 8px 0 0;
-      color: var(--muted);
-      line-height: 1.55;
-    }
-
-    .ops-list {
-      display: grid;
-      gap: 10px;
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-
-    .ops-list li {
-      padding: 12px 14px;
-      border-radius: 16px;
-      border: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.58);
-      color: var(--muted);
-      line-height: 1.45;
-    }
-
-    .compose {
-      display: grid;
-      grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.25fr);
-      gap: 18px;
-      margin-bottom: 18px;
-    }
-
     .form-panel {
       padding: 24px;
+      margin-bottom: 18px;
     }
 
     .section-title {
@@ -339,6 +289,7 @@
       border-bottom: 1px solid var(--line);
       text-align: left;
       vertical-align: top;
+      overflow-wrap: anywhere;
     }
 
     th {
@@ -431,13 +382,6 @@
       padding: 28px 14px;
     }
 
-    @media (max-width: 980px) {
-      .hero,
-      .compose {
-        grid-template-columns: 1fr;
-      }
-    }
-
     @media (max-width: 720px) {
       .shell {
         width: min(100vw - 20px, 1180px);
@@ -445,7 +389,6 @@
       }
 
       .hero-copy,
-      .ops-panel,
       .form-panel,
       .jobs-panel {
         padding: 18px;
@@ -470,8 +413,7 @@
 </head>
 <body>
   <div class="shell">
-    <section class="hero">
-      <div class="panel hero-copy">
+    <section class="hero panel hero-copy">
         <div class="eyebrow">Torrent Intake Control Plane</div>
         <h1>{{ title }}</h1>
         <p class="lede">
@@ -492,76 +434,63 @@
             <span class="meta-value">{{ settings.nas_staging_root }}</span>
           </div>
         </div>
-      </div>
-      <aside class="panel ops-panel">
-        <div>
-          <h2 class="ops-title">Operator Notes</h2>
-          <p class="ops-copy">Final-path suggestions stay inside the configured root. If you change `TI_FINAL_PARENT_PREFIX`, the same autocomplete behavior follows that new root automatically.</p>
-        </div>
-        <ul class="ops-list">
-          <li>Completion callbacks now trigger immediate per-job processing. Background polling remains fallback-only.</li>
-          <li>Recent jobs refresh in-place every 5 seconds. The form stays stable while the job table updates.</li>
-          <li>Category suggestions come from qBittorrent. Final-path suggestions merge qB known paths with live filesystem directories.</li>
-        </ul>
-      </aside>
     </section>
 
-    <section class="compose">
-      <div class="panel form-panel">
-        <h2 class="section-title">New Intake</h2>
-        <p class="section-copy">Paste the full magnet URI, confirm the destination under the final root, and submit. The form keeps the final path/category values in place so repeat submissions stay fast.</p>
+    <div class="panel form-panel">
+      <h2 class="section-title">New Intake</h2>
+      <p class="section-copy">Paste the full magnet URI, confirm the destination, and submit. The final path starts at the configured root and the form keeps category/path values in place between submissions.</p>
 
-        <form id="job-form">
-          <div class="field-grid">
-            <label class="field-wide">
-              <span>Magnet Link</span>
-              <textarea id="magnet-input" class="mono" name="magnet_uri" placeholder="magnet:?xt=urn:btih:..." spellcheck="false" required></textarea>
-              <span class="hint">Large magnets stay visible here so malformed trackers or truncated hashes are easier to spot.</span>
-            </label>
+      <form id="job-form">
+        <div class="field-grid">
+          <label class="field-wide">
+            <span>Magnet Link</span>
+            <textarea id="magnet-input" class="mono" name="magnet_uri" placeholder="magnet:?xt=urn:btih:..." spellcheck="false" required></textarea>
+            <span class="hint">Large magnets stay visible here so malformed trackers or truncated hashes are easier to spot.</span>
+          </label>
 
-            <label class="field-wide">
-              <span>Final Parent Path</span>
-              <input
-                id="final-parent-input"
-                class="mono"
-                type="text"
-                name="final_parent"
-                list="final-parent-suggestions"
-                autocomplete="off"
-                data-default-prefix="{{ settings.final_parent_prefix }}"
-                placeholder="{{ settings.final_parent_prefix }}/"
-                required>
-              <span class="hint">Autocomplete suggests directories under the configured final root. You can still edit the path manually.</span>
-            </label>
+          <label class="field-wide">
+            <span>Final Parent Path</span>
+            <input
+              id="final-parent-input"
+              class="mono"
+              type="text"
+              name="final_parent"
+              list="final-parent-suggestions"
+              autocomplete="off"
+              data-default-prefix="{{ settings.final_parent_prefix }}"
+              placeholder="{{ settings.final_parent_prefix }}/"
+              required>
+            <span class="hint">Autocomplete suggests live directories under the configured final root. You can still edit the full path manually.</span>
+          </label>
 
-            <label class="field">
-              <span>Final Category</span>
-              <input id="final-category-input" type="text" name="final_category" list="category-suggestions" placeholder="Movies" autocomplete="off">
-              <span class="hint">Optional. Existing qB categories are suggested and missing categories can be auto-created if enabled.</span>
-            </label>
+          <label class="field">
+            <span>Final Category</span>
+            <input id="final-category-input" type="text" name="final_category" list="category-suggestions" placeholder="Movies" autocomplete="off">
+            <span class="hint">Optional. Existing qB categories are suggested and missing categories can be auto-created if enabled.</span>
+          </label>
 
-            <label class="field">
-              <span>Staging Preference</span>
-              <select name="staging_preference">
-                <option value="local">Local</option>
-                <option value="nas">NAS</option>
-              </select>
-              <span class="hint">Local is default. Large torrents can still be pushed to NAS automatically by threshold.</span>
-            </label>
-          </div>
+          <label class="field">
+            <span>Staging Preference</span>
+            <select name="staging_preference">
+              <option value="local">Local</option>
+              <option value="nas">NAS</option>
+            </select>
+            <span class="hint">Local is default. Large torrents can still be pushed to NAS automatically by threshold.</span>
+          </label>
+        </div>
 
-          <div class="actions-row">
-            <button id="submit-button" class="button-primary" type="submit">Submit Intake Job</button>
-            <button id="refresh-jobs-button" class="button-secondary" type="button">Refresh Jobs</button>
-            <span id="form-status" class="form-status"></span>
-          </div>
-        </form>
+        <div class="actions-row">
+          <button id="submit-button" class="button-primary" type="submit">Submit Intake Job</button>
+          <button id="refresh-jobs-button" class="button-secondary" type="button">Refresh Jobs</button>
+          <span id="form-status" class="form-status"></span>
+        </div>
+      </form>
 
-        <datalist id="final-parent-suggestions"></datalist>
-        <datalist id="category-suggestions"></datalist>
-      </div>
+      <datalist id="final-parent-suggestions"></datalist>
+      <datalist id="category-suggestions"></datalist>
+    </div>
 
-      <div class="panel jobs-panel">
+    <div class="panel jobs-panel">
         <div class="jobs-head">
           <div>
             <h2 class="jobs-title">Recent Jobs</h2>
@@ -608,8 +537,7 @@
             </tbody>
           </table>
         </div>
-      </div>
-    </section>
+    </div>
   </div>
 
   <script>
