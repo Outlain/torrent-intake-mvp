@@ -24,7 +24,7 @@
       <input type="text" name="magnet_uri" placeholder="magnet:?xt=urn:btih:..." required>
     </label>
     <label>Final parent path
-      <input type="text" name="final_parent" placeholder="/downloads/Movies" list="final-parent-suggestions" required>
+      <input id="final-parent-input" type="text" name="final_parent" placeholder="/downloads/Movies" list="final-parent-suggestions" autocomplete="off" required>
     </label>
     <label>Final category (optional)
       <input type="text" name="final_category" placeholder="Movies" list="category-suggestions">
@@ -114,6 +114,8 @@
       location.reload();
     }
 
+    let knownFinalPaths = [];
+
     async function loadSuggestions() {
       const replaceOptions = (listId, values) => {
         const list = document.getElementById(listId);
@@ -135,16 +137,43 @@
       } catch (error) {}
 
       try {
-        const pathsRes = await fetch('/qbt/final-path-suggestions');
+        const finalParentInput = document.getElementById('final-parent-input');
+        const rawPrefix = finalParentInput.value.trim();
+        const prefix = encodeURIComponent(rawPrefix);
+        const pathsRes = await fetch(`/fs/final-path-suggestions?prefix=${prefix}`);
         if (pathsRes.ok) {
           const data = await pathsRes.json();
-          const paths = Array.isArray(data.paths) ? data.paths : [];
+          const filesystemPaths = Array.isArray(data.paths) ? data.paths : [];
+          const loweredPrefix = rawPrefix.toLowerCase();
+          const filteredKnownPaths = knownFinalPaths.filter((path) => {
+            if (!loweredPrefix) return true;
+            return path.toLowerCase().startsWith(loweredPrefix);
+          });
+          const paths = Array.from(new Set([...filteredKnownPaths, ...filesystemPaths])).sort();
           replaceOptions('final-parent-suggestions', paths);
         }
       } catch (error) {}
     }
 
-    loadSuggestions();
+    async function loadKnownFinalPaths() {
+      try {
+        const pathsRes = await fetch('/qbt/final-path-suggestions');
+        if (pathsRes.ok) {
+          const data = await pathsRes.json();
+          knownFinalPaths = Array.isArray(data.paths) ? data.paths : [];
+        }
+      } catch (error) {}
+    }
+
+    let finalPathTimer = null;
+    const finalParentInput = document.getElementById('final-parent-input');
+    finalParentInput.addEventListener('input', () => {
+      if (finalPathTimer) clearTimeout(finalPathTimer);
+      finalPathTimer = setTimeout(loadSuggestions, 120);
+    });
+    finalParentInput.addEventListener('focus', loadSuggestions);
+
+    loadKnownFinalPaths().then(loadSuggestions);
   </script>
 </body>
 </html>

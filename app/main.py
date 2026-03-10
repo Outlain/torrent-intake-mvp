@@ -3,7 +3,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
+from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -117,6 +117,14 @@ def qbt_final_path_suggestions():
         return {"paths": service.qbt.list_save_path_suggestions()}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Failed to fetch qBittorrent path suggestions: {exc}") from exc
+
+
+@app.get("/fs/final-path-suggestions")
+def fs_final_path_suggestions(prefix: str | None = Query(default=None)):
+    try:
+        return {"paths": service.suggest_final_paths(prefix)}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch filesystem path suggestions: {exc}") from exc
 
 
 @app.delete("/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)

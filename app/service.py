@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timedelta
 import logging
+from pathlib import Path
 from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -110,6 +111,26 @@ class JobService:
             raise ValueError("Only terminal jobs can be deleted")
         db.delete(job)
         db.commit()
+
+    def suggest_final_paths(self, prefix: str | None) -> list[str]:
+        root = Path(self.settings.final_parent_prefix.rstrip("/")).resolve()
+        raw_prefix = (prefix or "").strip()
+        normalized_prefix = raw_prefix or f"{root}/"
+
+        suggestions: set[str] = set()
+        suggestions.add(str(root))
+
+        if not normalized_prefix.startswith(f"{root}/") and normalized_prefix != str(root):
+            return sorted(suggestions)[:50]
+
+        browse_dir, partial = self._path_lookup_context(normalized_prefix, root)
+        suggestions.update(self._list_child_directories(browse_dir, partial))
+
+        exact_dir = Path(normalized_prefix.rstrip("/"))
+        if normalized_prefix and exact_dir.exists() and exact_dir.is_dir() and self._is_within_root(str(exact_dir), root):
+            suggestions.update(self._list_child_directories(exact_dir, ""))
+
+        return sorted(suggestions)[:50]
 
     def _root_for_preference(self, preference: str) -> str:
         return self.settings.local_staging_root if preference == "local" else self.settings.nas_staging_root
@@ -395,3 +416,44 @@ class JobService:
             if tag.startswith("ti_job_"):
                 return tag
         return None
+
+    def _path_lookup_context(self, typed_path: str, root: Path) -> tuple[Path, str]:
+        if typed_path.endswith("/"):
+            candidate = Path(typed_path.rstrip("/"))
+            partial = ""
+        else:
+            candidate = Path(typed_path).parent
+            partial = Path(typed_path).name
+
+        browse_dir = candidate
+        while browse_dir != root and (not browse_dir.exists() or not browse_dir.is_dir()):
+            browse_dir = browse_dir.parent
+
+        if not browse_dir.exists() or not browse_dir.is_dir():
+            browse_dir = root
+
+        return browse_dir, partial
+
+    def _list_child_directories(self, directory: Path, partial: str) -> set[str]:
+        matches: set[str] = set()
+        if not directory.exists() or not directory.is_dir():
+            return matches
+
+        lowered_partial = partial.lower()
+        try:
+            for entry in directory.iterdir():
+                if not entry.is_dir():
+                    continue
+                if lowered_partial and not entry.name.lower().startswith(lowered_partial):
+                    continue
+                matches.add(str(entry))
+        except OSError as exc:
+            self.logger.warning("Failed to list suggestion directory %s: %s", directory, exc)
+        return matches
+
+    def _is_within_root(self, candidate: str, root: Path) -> bool:
+        try:
+            resolved = Path(candidate.rstrip("/")).resolve()
+            return resolved == root or root in resolved.parents
+        except OSError:
+            return False
