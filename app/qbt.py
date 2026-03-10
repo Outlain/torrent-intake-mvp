@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Optional
 import qbittorrentapi
 from .config import get_settings
 
@@ -16,18 +15,37 @@ class QbtService:
             VERIFY_WEBUI_CERTIFICATE=self.settings.qbt_verify_certificate,
             REQUESTS_ARGS={"timeout": self.settings.qbt_request_timeout_seconds},
         )
-        client.auth_log_in()
+        try:
+            client.auth_log_in()
+        except Exception as exc:
+            raise RuntimeError(
+                "qBittorrent login failed "
+                f"(host={self.settings.qbt_host}, user={self.settings.qbt_username}): {self._format_exc(exc)}"
+            ) from exc
         return client
+
+    @staticmethod
+    def _format_exc(exc: Exception) -> str:
+        message = str(exc).strip()
+        if message:
+            return f"{exc.__class__.__name__}: {message}"
+        return repr(exc)
 
     def add_torrent(self, magnet_uri: str, save_path: str, tags: list[str], category: str) -> None:
         client = self.client()
-        client.torrents_add(
-            urls=magnet_uri,
-            save_path=save_path,
-            tags=tags,
-            category=category,
-            is_paused=False,
-        )
+        try:
+            client.torrents_add(
+                urls=magnet_uri,
+                save_path=save_path,
+                tags=tags,
+                category=category,
+                is_paused=False,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "qBittorrent rejected torrent add request "
+                f"(save_path={save_path}, category={category}): {self._format_exc(exc)}"
+            ) from exc
 
     def find_by_unique_tag(self, unique_tag: str):
         client = self.client()

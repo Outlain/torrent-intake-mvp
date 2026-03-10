@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timedelta
+import logging
 from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ class JobService:
         self.qbt = QbtService()
         self.scanner = ScannerService()
         self.telegram = TelegramService()
+        self.logger = logging.getLogger(__name__)
 
     def submit_job(self, db: Session, *, magnet_uri: str, final_parent: str, final_category: str | None,
                    staging_preference: str) -> Job:
@@ -52,10 +54,12 @@ class JobService:
             )
             self._resolve_hash_for_job(db, job)
         except Exception as exc:
-            self._mark(job, "error", error=f"qBittorrent submission failed: {exc}")
+            error_text = str(exc).strip() or repr(exc)
+            self.logger.exception("Failed to submit job %s to qBittorrent", job.id)
+            self._mark(job, "error", error=f"qBittorrent submission failed: {error_text}")
             db.add(job)
             db.commit()
-            raise RuntimeError(f"Failed to submit to qBittorrent: {exc}") from exc
+            raise RuntimeError(f"Failed to submit to qBittorrent: {error_text}") from exc
         return job
 
     def _root_for_preference(self, preference: str) -> str:
