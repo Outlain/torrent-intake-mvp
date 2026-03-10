@@ -70,13 +70,11 @@ class JobService:
             raise ValueError("Only jobs in error state can be retried")
 
         staging_root = job.staging_root_actual or job.staging_root_initial or self._root_for_preference(job.staging_preference)
-        job.is_terminal = False
-        job.last_error = None
-        job.updated_at = datetime.utcnow()
-        job.state = "retrying"
+        self._prepare_job_for_retry(job)
 
         try:
-            if job.qbt_hash and self.qbt.get_torrent(job.qbt_hash) is None:
+            torrent = self.qbt.get_torrent(job.qbt_hash) if job.qbt_hash else None
+            if job.qbt_hash and torrent is None:
                 job.qbt_hash = None
 
             if not job.qbt_hash:
@@ -89,7 +87,9 @@ class JobService:
                 self._resolve_hash_for_job(db, job)
                 return job
 
-            self._mark(job, "downloading")
+            self._sync_job_from_torrent(job, torrent)
+            job.state = self._state_for_retry(job, torrent)
+            job.is_terminal = False
             db.add(job)
             db.commit()
             db.refresh(job)
@@ -119,6 +119,48 @@ class JobService:
         job.updated_at = datetime.utcnow()
         job.last_error = error
         job.is_terminal = state in self.TERMINAL_STATES
+
+    def _prepare_job_for_retry(self, job: Job) -> None:
+        job.is_terminal = False
+        job.last_error = None
+        job.updated_at = datetime.utcnow()
+        job.state = "retrying"
+
+        # If the job failed before a successful scan/promotion, clear stale progress markers
+        # so the worker doesn't jump back into a later phase with old timestamps/content paths.
+        if not job.scan_completed_at:
+            job.download_complete_at = None
+            job.completion_event_received_at = None
+            job.content_path = None
+        if not job.promoted_at:
+            job.scan_completed_at = None
+        if not job.deleted_at:
+            job.deleted_at = None
+
+    def _sync_job_from_torrent(self, job: Job, torrent) -> None:
+        if torrent is None:
+            return
+        job.torrent_name = getattr(torrent, "name", None) or job.torrent_name
+        job.last_seen_qbt_state = getattr(torrent, "state", None)
+        current_path = getattr(torrent, "content_path", None)
+        if current_path:
+            job.content_path = current_path
+        size = getattr(torrent, "size", None) or getattr(torrent, "total_size", None)
+        if isinstance(size, int):
+            job.size_bytes = size
+
+    def _state_for_retry(self, job: Job, torrent) -> str:
+        if job.deleted_at:
+            return "infected_deleted"
+        if job.promoted_at:
+            return "done"
+        if job.scan_completed_at:
+            return "promoting"
+        if torrent is not None and self._is_torrent_complete(torrent):
+            if not job.download_complete_at:
+                job.download_complete_at = datetime.utcnow()
+            return "download_complete"
+        return "downloading"
 
     def _resolve_hash_for_job(self, db: Session, job: Job) -> None:
         torrent = self.qbt.find_by_unique_tag(job.unique_tag)
@@ -187,12 +229,7 @@ class JobService:
             raise RuntimeError(f"Torrent {job.qbt_hash} not found in qBittorrent")
 
         qbt_state = getattr(torrent, "state", None)
-        job.last_seen_qbt_state = qbt_state
-        job.torrent_name = getattr(torrent, "name", None) or job.torrent_name
-        job.content_path = getattr(torrent, "content_path", None) or job.content_path
-        size = getattr(torrent, "size", None) or getattr(torrent, "total_size", None)
-        if isinstance(size, int):
-            job.size_bytes = size
+        self._sync_job_from_torrent(job, torrent)
 
         self._maybe_override_to_nas(job)
 
@@ -280,6 +317,14 @@ class JobService:
         amount_left = getattr(torrent, "amount_left", None)
         completion_on = getattr(torrent, "completion_on", 0) or 0
         qbt_state = str(getattr(torrent, "state", "") or "")
+        self.logger.info(
+            "Completion check hash=%s state=%s progress=%.5f amount_left=%s completion_on=%s",
+            getattr(torrent, "hash", "unknown"),
+            qbt_state,
+            progress,
+            amount_left,
+            completion_on,
+        )
 
         if isinstance(amount_left, int) and amount_left > 0:
             return False
