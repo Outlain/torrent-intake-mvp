@@ -24,6 +24,7 @@ services:
       - TI_LOCAL_STAGING_ROOT=/staging-local
       - TI_NAS_STAGING_ROOT=/downloads/torrent-intake/staging
       - TI_FINAL_PARENT_PREFIX=/downloads
+      - TI_FINAL_PARENT_PREFIXES=/downloads
       - TI_LOCAL_MAX_GIB=200
       - TI_POLLING_INTERVAL_SECONDS=300
       - TI_COMPLETION_GRACE_SECONDS=15

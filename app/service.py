@@ -113,24 +113,34 @@ class JobService:
         db.commit()
 
     def suggest_final_paths(self, prefix: str | None) -> list[str]:
-        root = Path(self.settings.final_parent_prefix.rstrip("/")).resolve()
+        roots = [Path(path).resolve() for path in self.settings.allowed_final_parent_prefixes]
+        default_root = Path(self.settings.final_parent_prefix.rstrip("/")).resolve()
         raw_prefix = (prefix or "").strip()
-        normalized_prefix = raw_prefix or f"{root}/"
+        normalized_prefix = raw_prefix or f"{default_root}/"
 
         suggestions: set[str] = set()
-        suggestions.add(str(root))
+        suggestions.update(str(root) for root in roots)
 
-        if not normalized_prefix.startswith(f"{root}/") and normalized_prefix != str(root):
-            return sorted(suggestions)[:50]
+        matched_root = self._matching_final_root(normalized_prefix, roots)
+        if matched_root is None:
+            filtered_roots = {
+                suggestion for suggestion in suggestions
+                if not raw_prefix or suggestion.lower().startswith(raw_prefix.lower())
+            }
+            return sorted(filtered_roots or suggestions)[:50]
 
-        browse_dir, partial = self._path_lookup_context(normalized_prefix, root)
+        browse_dir, partial = self._path_lookup_context(normalized_prefix, matched_root)
         suggestions.update(self._list_child_directories(browse_dir, partial))
 
         exact_dir = Path(normalized_prefix.rstrip("/"))
-        if normalized_prefix and exact_dir.exists() and exact_dir.is_dir() and self._is_within_root(str(exact_dir), root):
+        if normalized_prefix and exact_dir.exists() and exact_dir.is_dir() and self._is_within_root(str(exact_dir), matched_root):
             suggestions.update(self._list_child_directories(exact_dir, ""))
 
-        return sorted(suggestions)[:50]
+        filtered_suggestions = {
+            suggestion for suggestion in suggestions
+            if not raw_prefix or suggestion.lower().startswith(raw_prefix.lower())
+        }
+        return sorted(filtered_suggestions or suggestions)[:50]
 
     def _root_for_preference(self, preference: str) -> str:
         return self.settings.local_staging_root if preference == "local" else self.settings.nas_staging_root
@@ -433,6 +443,16 @@ class JobService:
             browse_dir = root
 
         return browse_dir, partial
+
+    def _matching_final_root(self, typed_path: str, roots: list[Path]) -> Path | None:
+        typed = typed_path.rstrip("/")
+        matches = [
+            root for root in roots
+            if typed == str(root) or typed.startswith(f"{root}/")
+        ]
+        if not matches:
+            return None
+        return max(matches, key=lambda root: len(str(root)))
 
     def _list_child_directories(self, directory: Path, partial: str) -> set[str]:
         matches: set[str] = set()

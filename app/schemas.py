@@ -15,9 +15,12 @@ class JobCreate(BaseModel):
     @classmethod
     def validate_final_parent(cls, value: str) -> str:
         settings = get_settings()
-        if not value.startswith(settings.final_parent_prefix.rstrip("/") + "/") and value != settings.final_parent_prefix.rstrip("/"):
-            raise ValueError(f"final_parent must be inside {settings.final_parent_prefix}")
-        return value
+        for prefix in settings.allowed_final_parent_prefixes:
+            normalized = prefix.rstrip("/")
+            if value == normalized or value.startswith(f"{normalized}/"):
+                return value
+        allowed = ", ".join(settings.allowed_final_parent_prefixes)
+        raise ValueError(f"final_parent must be inside one of: {allowed}")
 
     @field_validator("magnet_uri")
     @classmethod

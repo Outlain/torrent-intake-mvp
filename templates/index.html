@@ -418,7 +418,7 @@
         <h1>{{ title }}</h1>
         <p class="lede">
           Submit a magnet, stage it safely, scan on completion, and only promote clean content into the final library.
-          The form defaults to the configured final root so you are not retyping the same prefix for every intake.
+          The form defaults to the configured main final root so you are not retyping the same prefix for every intake.
         </p>
         <div class="meta-grid">
           <div class="meta-card">
@@ -460,7 +460,7 @@
               data-default-prefix="{{ settings.final_parent_prefix }}"
               placeholder="{{ settings.final_parent_prefix }}/"
               required>
-            <span class="hint">Autocomplete suggests live directories under the configured final root. You can still edit the full path manually.</span>
+            <span class="hint">Autocomplete suggests live directories under the allowed final roots. Clear the field and type `/` to browse those roots, while the default prefill stays on the main root.</span>
           </label>
 
           <label class="field">

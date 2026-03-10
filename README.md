@@ -2,7 +2,7 @@
 
 A privacy-focused intake controller for qBittorrent.
 
-This service accepts new torrent jobs, stages downloads in a controlled location, scans completed content for malware, deletes infected content, and only promotes clean files to a final destination under `/downloads`.
+This service accepts new torrent jobs, stages downloads in a controlled location, scans completed content for malware, deletes infected content, and only promotes clean files to an approved final destination root.
 
 ## What This Project Does
 
@@ -22,7 +22,7 @@ Given a magnet link and a final destination path, the app:
 - Optional staging mode is NAS staging at `/downloads/torrent-intake/staging`.
 - If a job was requested as `local` and the torrent size exceeds `TI_LOCAL_MAX_GIB`, the app overrides staging to NAS.
 - If a job was requested as `nas`, it stays on NAS (no move back to local).
-- Only final paths under `/downloads` are accepted (`TI_FINAL_PARENT_PREFIX`).
+- Final paths must live under an explicit allowlist of approved roots. By default that is just `TI_FINAL_PARENT_PREFIX` (`/downloads`).
 - Malware scan runs before any promotion step.
 - On infection, torrent and files are deleted; no promotion occurs.
 - Telegram alerts are sent only on infection/deletion.
@@ -50,7 +50,8 @@ Copy `.env.example` to `.env` and set values for your environment.
 | `TI_AUTO_CREATE_FINAL_CATEGORY` | Yes | If `true`, create missing final category in qBittorrent |
 | `TI_LOCAL_STAGING_ROOT` | Yes | Must be `/staging-local` in container |
 | `TI_NAS_STAGING_ROOT` | Yes | Usually `/downloads/torrent-intake/staging` |
-| `TI_FINAL_PARENT_PREFIX` | Yes | Must be `/downloads` |
+| `TI_FINAL_PARENT_PREFIX` | Yes | Default final root used for prefill/autocomplete |
+| `TI_FINAL_PARENT_PREFIXES` | Optional | Comma-separated allowlist of additional approved final roots |
 | `TI_LOCAL_MAX_GIB` | Yes | Local-to-NAS override threshold |
 | `TI_COMPLETION_EVENT_TOKEN` | Optional | Shared secret for qB completion callback |
 | `TI_CLAMDSCAN_BINARY` | Yes | Malware scanner binary |
@@ -111,7 +112,7 @@ See `portainer-stack.example.yml` and adjust host paths, qBittorrent endpoint, a
 - `DELETE /jobs/{job_id}` delete terminal job from intake DB
 - `GET /qbt/categories` list qBittorrent categories
 - `GET /qbt/final-path-suggestions` list known qB save path suggestions
-- `GET /fs/final-path-suggestions` list live directory suggestions inside the configured final root
+- `GET /fs/final-path-suggestions` list live directory suggestions inside the approved final roots
 - `POST /events/qbt-complete` JSON completion event
 - `POST /events/qbt-complete-form` form completion event
 - `GET /health` health endpoint
@@ -184,10 +185,11 @@ Notes:
 
 ## Path Suggestions
 
-- The UI prefills the final path with `TI_FINAL_PARENT_PREFIX` so operators are not retyping the same root for every intake job.
-- Live final-path suggestions are scoped to that configured root and browse real directories under it.
-- If you change `TI_FINAL_PARENT_PREFIX` to another mounted root, the same prefill and live suggestion behavior follows that new root automatically.
-- Multiple simultaneous final roots are not currently supported; the app is designed around one allowed final root at a time.
+- The UI prefills the final path with `TI_FINAL_PARENT_PREFIX` so operators are not retyping the main root for every intake job.
+- `TI_FINAL_PARENT_PREFIXES` can add more allowed roots without changing the default prefill.
+- Live final-path suggestions browse real directories under the approved roots only.
+- If you clear the field and type `/`, the UI suggests the approved roots so you can switch to another mounted destination quickly.
+- Arbitrary container paths are still blocked; this protects qBittorrent moves from bad destinations like `/app`, `/var`, or other non-library paths.
 
 ## What Should Not Be Committed
 

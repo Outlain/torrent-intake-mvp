@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +21,7 @@ class Settings(BaseSettings):
     local_staging_root: str = "/staging-local"
     nas_staging_root: str = "/downloads/torrent-intake/staging"
     final_parent_prefix: str = "/downloads"
+    final_parent_prefixes: str | None = None
 
     local_max_gib: int = 200
     polling_interval_seconds: int = 300
@@ -44,6 +46,24 @@ class Settings(BaseSettings):
     @property
     def local_max_bytes(self) -> int:
         return self.local_max_gib * 1024 * 1024 * 1024
+
+    @property
+    def allowed_final_parent_prefixes(self) -> list[str]:
+        values = [self.final_parent_prefix]
+        if self.final_parent_prefixes:
+            values.extend(part.strip() for part in self.final_parent_prefixes.split(","))
+
+        unique_values: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            if not value:
+                continue
+            normalized = str(Path(value).resolve())
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            unique_values.append(normalized)
+        return unique_values
 
 
 @lru_cache(maxsize=1)
