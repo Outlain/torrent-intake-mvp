@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Literal
+import re
 from pydantic import BaseModel, Field, field_validator
 from .config import get_settings
 
@@ -23,6 +24,10 @@ class JobCreate(BaseModel):
     def validate_magnet(cls, value: str) -> str:
         if not value.startswith("magnet:?"):
             raise ValueError("Only magnet links are supported in this MVP")
+        # Require a plausible BTIH hash to avoid opaque downstream qBittorrent errors.
+        pattern = re.compile(r"(^|[?&])xt=urn:btih:([A-Za-z0-9]{32}|[A-Fa-f0-9]{40})($|&)")
+        if not pattern.search(value):
+            raise ValueError("magnet_uri must include a valid xt=urn:btih hash")
         return value
 
 

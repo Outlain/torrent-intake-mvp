@@ -43,14 +43,19 @@ class JobService:
         db.commit()
         db.refresh(job)
 
-        self.qbt.add_torrent(
-            magnet_uri=magnet_uri,
-            save_path=staging_root,
-            tags=[self.settings.managed_tag, unique_tag],
-            category=self.settings.intake_category,
-        )
-
-        self._resolve_hash_for_job(db, job)
+        try:
+            self.qbt.add_torrent(
+                magnet_uri=magnet_uri,
+                save_path=staging_root,
+                tags=[self.settings.managed_tag, unique_tag],
+                category=self.settings.intake_category,
+            )
+            self._resolve_hash_for_job(db, job)
+        except Exception as exc:
+            self._mark(job, "error", error=f"qBittorrent submission failed: {exc}")
+            db.add(job)
+            db.commit()
+            raise RuntimeError(f"Failed to submit to qBittorrent: {exc}") from exc
         return job
 
     def _root_for_preference(self, preference: str) -> str:

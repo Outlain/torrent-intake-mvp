@@ -56,14 +56,17 @@ def list_jobs(db: Session = Depends(get_db)):
 
 @app.post("/jobs", response_model=JobOut)
 def create_job(payload: JobCreate, db: Session = Depends(get_db)):
-    job = service.submit_job(
-        db,
-        magnet_uri=payload.magnet_uri,
-        final_parent=payload.final_parent,
-        final_category=payload.final_category,
-        staging_preference=payload.staging_preference,
-    )
-    return job
+    try:
+        job = service.submit_job(
+            db,
+            magnet_uri=payload.magnet_uri,
+            final_parent=payload.final_parent,
+            final_category=payload.final_category,
+            staging_preference=payload.staging_preference,
+        )
+        return job
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.get("/jobs/{job_id}", response_model=JobOut)
