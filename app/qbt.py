@@ -34,13 +34,15 @@ class QbtService:
     def add_torrent(self, magnet_uri: str, save_path: str, tags: list[str], category: str) -> None:
         client = self.client()
         try:
-            client.torrents_add(
+            result = client.torrents_add(
                 urls=magnet_uri,
                 save_path=save_path,
                 tags=tags,
                 category=category,
                 is_paused=False,
             )
+            if isinstance(result, str) and result.strip().lower() != "ok.":
+                raise RuntimeError(f"unexpected qBittorrent add result: {result}")
         except Exception as exc:
             raise RuntimeError(
                 "qBittorrent rejected torrent add request "

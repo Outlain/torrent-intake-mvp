@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     local_max_gib: int = 200
     polling_interval_seconds: int = 60
     completion_grace_seconds: int = 15
+    completion_event_token: str | None = None
 
     clamdscan_binary: str = "clamscan"
     clamdscan_args: str = "--infected --no-summary --recursive"

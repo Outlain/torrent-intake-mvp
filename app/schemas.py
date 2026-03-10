@@ -61,6 +61,16 @@ class JobOut(BaseModel):
 
 class CompletionEventIn(BaseModel):
     qbt_hash: str | None = None
+    qbt_hash_v2: str | None = None
     torrent_name: str | None = None
     content_path: str | None = None
+    root_path: str | None = None
+    save_path: str | None = None
+    category: str | None = None
+    tags: str | None = None
+    tracker: str | None = None
+    size_bytes: int | None = None
+    files_count: int | None = None
+    torrent_id: str | None = None
+    token: str | None = None
     unique_tag: str | None = None

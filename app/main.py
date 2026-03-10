@@ -44,6 +44,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.ui_title, lifespan=lifespan)
 
 
+def _validate_completion_event_token(token: str | None) -> None:
+    expected = settings.completion_event_token
+    if expected and token != expected:
+        raise HTTPException(status_code=403, detail="Invalid completion event token")
+
+
 @app.get("/", include_in_schema=False)
 def root() -> RedirectResponse:
     return RedirectResponse(url="/ui", status_code=307)
@@ -124,31 +130,63 @@ def delete_job(job_id: str, db: Session = Depends(get_db)):
 
 @app.post("/events/qbt-complete")
 def qbt_complete_event(payload: CompletionEventIn, db: Session = Depends(get_db)):
+    _validate_completion_event_token(payload.token)
     job = service.ingest_completion_event(
         db,
         qbt_hash=payload.qbt_hash,
+        qbt_hash_v2=payload.qbt_hash_v2,
         unique_tag=payload.unique_tag,
+        tags=payload.tags,
         torrent_name=payload.torrent_name,
         content_path=payload.content_path,
+        root_path=payload.root_path,
+        save_path=payload.save_path,
+        size_bytes=payload.size_bytes,
     )
     if not job:
         raise HTTPException(status_code=404, detail="No matching job found")
-    return {"status": "accepted", "job_id": job.id}
+    try:
+        job = service.process_job_immediately(db, job_id=job.id, ignore_event_grace=True)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"status": "accepted", "job_id": job.id, "state": job.state}
 
 
 @app.post("/events/qbt-complete-form")
 def qbt_complete_event_form(
     qbt_hash: str | None = Form(default=None),
+    qbt_hash_v2: str | None = Form(default=None),
     unique_tag: str | None = Form(default=None),
     torrent_name: str | None = Form(default=None),
     content_path: str | None = Form(default=None),
+    root_path: str | None = Form(default=None),
+    save_path: str | None = Form(default=None),
+    category: str | None = Form(default=None),
+    tags: str | None = Form(default=None),
+    tracker: str | None = Form(default=None),
+    size_bytes: int | None = Form(default=None),
+    files_count: int | None = Form(default=None),
+    torrent_id: str | None = Form(default=None),
+    token: str | None = Form(default=None),
     db: Session = Depends(get_db),
 ):
     payload = CompletionEventIn(
         qbt_hash=qbt_hash,
+        qbt_hash_v2=qbt_hash_v2,
         unique_tag=unique_tag,
         torrent_name=torrent_name,
         content_path=content_path,
+        root_path=root_path,
+        save_path=save_path,
+        category=category,
+        tags=tags,
+        tracker=tracker,
+        size_bytes=size_bytes,
+        files_count=files_count,
+        torrent_id=torrent_id,
+        token=token,
     )
     return qbt_complete_event(payload, db)
 

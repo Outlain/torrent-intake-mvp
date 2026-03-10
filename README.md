@@ -52,6 +52,7 @@ Copy `.env.example` to `.env` and set values for your environment.
 | `TI_NAS_STAGING_ROOT` | Yes | Usually `/downloads/torrent-intake/staging` |
 | `TI_FINAL_PARENT_PREFIX` | Yes | Must be `/downloads` |
 | `TI_LOCAL_MAX_GIB` | Yes | Local-to-NAS override threshold |
+| `TI_COMPLETION_EVENT_TOKEN` | Optional | Shared secret for qB completion callback |
 | `TI_CLAMDSCAN_BINARY` | Yes | Malware scanner binary |
 | `TI_CLAMDSCAN_ARGS` | Yes | Scanner args |
 | `TI_TELEGRAM_BOT_TOKEN` | Optional | Required only if Telegram alerts enabled |
@@ -152,6 +153,40 @@ The intake worker only moves to scan/promotion when completion checks pass:
 - qBittorrent state is not one of active download/checking states
 
 After that it pauses the torrent, scans content, and only then promotes and resumes for seeding.
+
+## qBittorrent Completion Hook
+
+Recommended deployment model:
+
+- Configure qBittorrent "Run on torrent finished"
+- Use the callback to trigger intake processing immediately
+- Raise `TI_POLLING_INTERVAL_SECONDS` to `300` as a fallback safety net instead of relying on 60-second polling
+
+Example qBittorrent command when both containers share a Docker network:
+
+```sh
+curl -fsS -X POST "http://torrent-intake:8000/events/qbt-complete-form" \
+  -F "token=REPLACE_WITH_RANDOM_TOKEN" \
+  -F "qbt_hash=%I" \
+  -F "qbt_hash_v2=%J" \
+  -F "torrent_id=%K" \
+  -F "torrent_name=%N" \
+  -F "category=%L" \
+  -F "tags=%G" \
+  -F "content_path=%F" \
+  -F "root_path=%R" \
+  -F "save_path=%D" \
+  -F "files_count=%C" \
+  -F "size_bytes=%Z" \
+  -F "tracker=%T"
+```
+
+Notes:
+
+- `%G` is important because intake can recover the internal `ti_job_*` tag from qB tags.
+- Use quotes around qB parameters because names and paths may contain spaces.
+- If you do not want callback authentication, leave `TI_COMPLETION_EVENT_TOKEN` blank and omit the `token` form field.
+- The callback triggers an immediate per-job processing pass; the background poller remains as a fallback.
 
 ## What Should Not Be Committed
 

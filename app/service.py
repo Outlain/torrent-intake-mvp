@@ -178,43 +178,74 @@ class JobService:
         db.commit()
         db.refresh(job)
 
-    def ingest_completion_event(self, db: Session, *, qbt_hash: str | None, unique_tag: str | None,
-                                torrent_name: str | None, content_path: str | None) -> Job | None:
+    def ingest_completion_event(self, db: Session, *, qbt_hash: str | None, qbt_hash_v2: str | None,
+                                unique_tag: str | None, tags: str | None, torrent_name: str | None,
+                                content_path: str | None, root_path: str | None,
+                                save_path: str | None, size_bytes: int | None) -> Job | None:
+        unique_tag = unique_tag or self._extract_unique_tag(tags)
         stmt = None
         if qbt_hash:
             stmt = select(Job).where(Job.qbt_hash == qbt_hash)
         elif unique_tag:
             stmt = select(Job).where(Job.unique_tag == unique_tag)
         else:
+            self.logger.warning(
+                "Completion event ignored: no qbt_hash/unique_tag (qbt_hash_v2=%s, tags=%s, torrent_name=%s)",
+                qbt_hash_v2,
+                tags,
+                torrent_name,
+            )
             return None
 
         job = db.scalar(stmt)
         if not job:
             return None
 
-        job.completion_event_received_at = datetime.utcnow()
+        # Backdate by grace seconds so an event-triggered processing pass can act immediately.
+        job.completion_event_received_at = datetime.utcnow() - timedelta(seconds=self.settings.completion_grace_seconds)
         if torrent_name:
             job.torrent_name = torrent_name
-        if content_path:
-            job.content_path = content_path
+        event_path = content_path or root_path or save_path
+        if event_path:
+            job.content_path = event_path
+        if isinstance(size_bytes, int) and size_bytes > 0:
+            job.size_bytes = size_bytes
         self._mark(job, "completion_event_received")
         db.add(job)
         db.commit()
         db.refresh(job)
         return job
 
+    def process_job_immediately(self, db: Session, *, job_id: str, ignore_event_grace: bool = False) -> Job:
+        job = db.get(Job, job_id)
+        if not job:
+            raise LookupError("Job not found")
+        if job.is_terminal:
+            return job
+        try:
+            self._process_one(db, job, ignore_event_grace=ignore_event_grace)
+            db.refresh(job)
+            return job
+        except Exception as exc:
+            self.logger.exception("Immediate processing failed for job %s", job.id)
+            self._mark(job, "error", error=str(exc))
+            db.add(job)
+            db.commit()
+            db.refresh(job)
+            raise RuntimeError(str(exc)) from exc
+
     def process_nonterminal_jobs(self, db: Session) -> None:
         jobs = list(db.scalars(select(Job).where(Job.is_terminal == False)))
         for job in jobs:
             try:
-                self._process_one(db, job)
+                self._process_one(db, job, ignore_event_grace=False)
             except Exception as exc:
                 self.logger.exception("Worker failed for job %s", job.id)
                 self._mark(job, "error", error=str(exc))
                 db.add(job)
                 db.commit()
 
-    def _process_one(self, db: Session, job: Job) -> None:
+    def _process_one(self, db: Session, job: Job, *, ignore_event_grace: bool) -> None:
         if not job.qbt_hash:
             self._resolve_hash_for_job(db, job)
             return
@@ -238,7 +269,10 @@ class JobService:
             job.download_complete_at = datetime.utcnow()
             self._mark(job, "download_complete")
 
-        event_ready = job.completion_event_received_at and datetime.utcnow() >= job.completion_event_received_at + timedelta(seconds=self.settings.completion_grace_seconds)
+        event_ready = ignore_event_grace or (
+            job.completion_event_received_at
+            and datetime.utcnow() >= job.completion_event_received_at + timedelta(seconds=self.settings.completion_grace_seconds)
+        )
         if (job.download_complete_at and job.state in {"download_complete", "completion_event_received", "downloading"}) and (event_ready or not job.completion_event_received_at):
             self._scan_and_finalize(job)
 
@@ -317,6 +351,7 @@ class JobService:
         amount_left = getattr(torrent, "amount_left", None)
         completion_on = getattr(torrent, "completion_on", 0) or 0
         qbt_state = str(getattr(torrent, "state", "") or "")
+        state_enum = getattr(torrent, "state_enum", None)
         self.logger.info(
             "Completion check hash=%s state=%s progress=%.5f amount_left=%s completion_on=%s",
             getattr(torrent, "hash", "unknown"),
@@ -325,6 +360,12 @@ class JobService:
             amount_left,
             completion_on,
         )
+
+        if state_enum is not None:
+            if getattr(state_enum, "is_downloading", False) or getattr(state_enum, "is_checking", False):
+                return False
+            if qbt_state in {"moving", "allocating", "missingFiles", "error", "unknown"}:
+                return False
 
         if isinstance(amount_left, int) and amount_left > 0:
             return False
@@ -345,3 +386,12 @@ class JobService:
             return False
 
         return bool(completion_on or progress >= 1.0)
+
+    def _extract_unique_tag(self, tags: str | None) -> str | None:
+        if not tags:
+            return None
+        for raw_tag in tags.split(","):
+            tag = raw_tag.strip()
+            if tag.startswith("ti_job_"):
+                return tag
+        return None
