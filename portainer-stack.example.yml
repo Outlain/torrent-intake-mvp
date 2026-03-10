@@ -24,8 +24,8 @@ services:
       - TI_LOCAL_MAX_GIB=200
       - TI_POLLING_INTERVAL_SECONDS=60
       - TI_COMPLETION_GRACE_SECONDS=15
-      - TI_CLAMDSCAN_BINARY=clamdscan
-      - TI_CLAMDSCAN_ARGS=--fdpass --infected --no-summary
+      - TI_CLAMDSCAN_BINARY=clamscan
+      - TI_CLAMDSCAN_ARGS=--infected --no-summary --recursive
       # Optional: only used for malware detection/deletion alerts
       - TI_TELEGRAM_BOT_TOKEN=
       - TI_TELEGRAM_CHAT_ID=

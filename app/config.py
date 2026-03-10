@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     polling_interval_seconds: int = 60
     completion_grace_seconds: int = 15
 
-    clamdscan_binary: str = "clamdscan"
-    clamdscan_args: str = "--fdpass --infected --no-summary"
+    clamdscan_binary: str = "clamscan"
+    clamdscan_args: str = "--infected --no-summary --recursive"
 
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None

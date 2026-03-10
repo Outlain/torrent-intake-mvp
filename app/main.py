@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
@@ -13,6 +14,11 @@ from .models import Job
 from .schemas import CompletionEventIn, JobCreate, JobOut
 from .service import JobService
 from .worker import worker_loop
+
+logging.basicConfig(
+    level=logging.DEBUG if get_settings().debug else logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 settings = get_settings()
 service = JobService()

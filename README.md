@@ -11,7 +11,7 @@ Given a magnet link and a final destination path, the app:
 1. Creates a tracked intake job.
 2. Adds the torrent to qBittorrent with controlled category/tags.
 3. Stages download data in either local staging or NAS staging.
-4. Scans completed content with `clamdscan`.
+4. Scans completed content with ClamAV (`clamscan` by default).
 5. Deletes infected torrents and files.
 6. Promotes clean torrents to the requested final destination.
 7. Sends Telegram notifications only for malware detection/deletion events.
@@ -130,7 +130,7 @@ Client -> Intake API -> qBittorrent (staging path)
                     Download completes
                           |
                           v
-                Malware scan (clamdscan)
+                Malware scan (clamscan)
                   |                     |
                   | infected            | clean
                   v                     v
@@ -150,6 +150,37 @@ Never commit:
 - machine-local files (for example `.DS_Store`)
 
 Use the provided `.gitignore` and `.dockerignore` to keep Git history and Docker build context clean.
+
+## Scanner Notes
+
+- Default scanner command is `clamscan --infected --no-summary --recursive`.
+- Keep ClamAV signatures up to date in your deployment (for example via `freshclam` automation or a dedicated scanner sidecar).
+- You can override scanner command/flags via `TI_CLAMDSCAN_BINARY` and `TI_CLAMDSCAN_ARGS`.
+
+## Using External ClamAV Containers
+
+If you already run sidecar containers like:
+
+- `clamav_defs_updater` (freshclam loop)
+- `clamav_scheduled` (periodic full-library scan/quarantine)
+- `clamav_notifier` (log-based Telegram alerts)
+
+you can and should keep them. They are complementary to intake scanning.
+
+Important behavior:
+
+- Torrent Intake scanning is a pre-promotion gate on each completed intake job.
+- Scheduled full scans are defense-in-depth for your broader library.
+- They are not redundant, especially when staging locally at `/staging-local` (outside `/downloads`).
+
+Recommended integration for `torrent-intake`:
+
+1. Mount shared ClamAV definitions into this container:
+   - `/mnt/media/docker/clamav/defs:/var/lib/clamav:ro`
+2. Keep `TI_CLAMDSCAN_BINARY=clamscan` unless you intentionally provide `clamdscan` in this same container image.
+3. Keep intake Telegram alerts for intake malware deletion events; keep your sidecar notifier for scheduled scanner findings if desired.
+
+Without fresh definitions available to intake scanner, detection quality may be poor or scanner may fail due to missing/outdated DB files.
 
 ## Build and Run Locally
 

@@ -167,6 +167,7 @@ class JobService:
             try:
                 self._process_one(db, job)
             except Exception as exc:
+                self.logger.exception("Worker failed for job %s", job.id)
                 self._mark(job, "error", error=str(exc))
                 db.add(job)
                 db.commit()
@@ -232,6 +233,7 @@ class JobService:
 
         self.qbt.pause(job.qbt_hash)
         self._mark(job, "scanning")
+        self.logger.info("Scanning job %s path=%s", job.id, job.content_path)
         result = self.scanner.scan_path(job.content_path)
         job.scan_completed_at = datetime.utcnow()
 
@@ -248,12 +250,15 @@ class JobService:
                 threat_name=threat,
             )
             self._mark(job, "infected_deleted")
+            self.logger.warning("Infected job deleted: job=%s threat=%s", job.id, threat)
             return
 
         self._mark(job, "promoting")
+        self.logger.info("Promoting clean job %s to %s", job.id, job.final_parent)
         self.qbt.set_location(job.qbt_hash, job.final_parent)
         if job.final_category:
             self.qbt.set_category(job.qbt_hash, job.final_category)
         self.qbt.resume(job.qbt_hash)
         job.promoted_at = datetime.utcnow()
         self._mark(job, "done")
+        self.logger.info("Job %s complete and resumed for seeding", job.id)
