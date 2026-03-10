@@ -1,0 +1,43 @@
+services:
+  torrent-intake:
+    # Option A (recommended for deployment): pull from GHCR
+    image: ghcr.io/outlain/torrent-intake-mvp:latest
+    # Option B (local build context path on Portainer host)
+    # build: /opt/docker/torrent-intake
+
+    container_name: torrent-intake
+    restart: unless-stopped
+
+    environment:
+      - TI_DEBUG=false
+      - TI_DATABASE_URL=sqlite:////app/data/torrent_intake.db
+      - TI_QBT_HOST=http://qbittorrent:8080
+      - TI_QBT_USERNAME=admin
+      - TI_QBT_PASSWORD=REPLACE_WITH_STRONG_PASSWORD
+      - TI_QBT_VERIFY_CERTIFICATE=false
+      - TI_QBT_REQUEST_TIMEOUT_SECONDS=20
+      - TI_INTAKE_CATEGORY=intake
+      - TI_MANAGED_TAG=torrent_intake
+      - TI_LOCAL_STAGING_ROOT=/staging-local
+      - TI_NAS_STAGING_ROOT=/downloads/torrent-intake/staging
+      - TI_FINAL_PARENT_PREFIX=/downloads
+      - TI_LOCAL_MAX_GIB=200
+      - TI_POLLING_INTERVAL_SECONDS=60
+      - TI_COMPLETION_GRACE_SECONDS=15
+      - TI_CLAMDSCAN_BINARY=clamdscan
+      - TI_CLAMDSCAN_ARGS=--fdpass --infected --no-summary
+      # Optional: only used for malware detection/deletion alerts
+      - TI_TELEGRAM_BOT_TOKEN=
+      - TI_TELEGRAM_CHAT_ID=
+
+    volumes:
+      # Example host paths only; replace to match your host
+      - /opt/docker/torrent-intake-data/data:/app/data
+      - /opt/docker/torrent-intake-data/logs:/app/logs
+      - /opt/torrent-intake/staging:/staging-local
+      - /mnt/media:/downloads
+
+    ports:
+      - "8095:8000"
+
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000

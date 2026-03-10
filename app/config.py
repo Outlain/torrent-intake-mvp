@@ -1,0 +1,49 @@
+from functools import lru_cache
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    app_name: str = "torrent-intake"
+    debug: bool = False
+    database_url: str = "sqlite:////app/data/torrent_intake.db"
+
+    qbt_host: str = "http://qbittorrent:8080"
+    qbt_username: str = "admin"
+    qbt_password: str = "REPLACE_WITH_STRONG_PASSWORD"
+    qbt_verify_certificate: bool = False
+    qbt_request_timeout_seconds: int = 20
+
+    intake_category: str = "intake"
+    managed_tag: str = "torrent_intake"
+
+    local_staging_root: str = "/staging-local"
+    nas_staging_root: str = "/downloads/torrent-intake/staging"
+    final_parent_prefix: str = "/downloads"
+
+    local_max_gib: int = 200
+    polling_interval_seconds: int = 60
+    completion_grace_seconds: int = 15
+
+    clamdscan_binary: str = "clamdscan"
+    clamdscan_args: str = "--fdpass --infected --no-summary"
+
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+
+    ui_title: str = "Torrent Intake"
+
+    model_config = SettingsConfigDict(
+        env_prefix="TI_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    @property
+    def local_max_bytes(self) -> int:
+        return self.local_max_gib * 1024 * 1024 * 1024
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()

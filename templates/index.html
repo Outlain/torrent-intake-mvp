@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; }
+    form { display: grid; gap: .75rem; max-width: 800px; margin-bottom: 2rem; }
+    input, select, button { padding: .7rem; font-size: 1rem; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: .5rem; text-align: left; vertical-align: top; }
+    th { background: #f5f5f5; }
+    .small { color: #666; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <h1>{{ title }}</h1>
+  <p class="small">Local staging: {{ settings.local_staging_root }} | NAS staging: {{ settings.nas_staging_root }} | Local max: {{ settings.local_max_gib }} GiB</p>
+
+  <form id="job-form">
+    <label>Magnet link
+      <input type="text" name="magnet_uri" placeholder="magnet:?xt=urn:btih:..." required>
+    </label>
+    <label>Final parent path
+      <input type="text" name="final_parent" placeholder="/downloads/Movies" required>
+    </label>
+    <label>Final category (optional)
+      <input type="text" name="final_category" placeholder="movies">
+    </label>
+    <label>Staging
+      <select name="staging_preference">
+        <option value="local">Local</option>
+        <option value="nas">NAS</option>
+      </select>
+    </label>
+    <button type="submit">Submit</button>
+  </form>
+
+  <h2>Recent jobs</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>State</th>
+        <th>Final Parent</th>
+        <th>Stage</th>
+        <th>Hash</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr>
+        <td>{{ job.id }}</td>
+        <td>{{ job.torrent_name or '-' }}</td>
+        <td>{{ job.state }}</td>
+        <td>{{ job.final_parent }}</td>
+        <td>{{ job.staging_actual or job.staging_preference }}</td>
+        <td>{{ job.qbt_hash or '-' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <script>
+    document.getElementById('job-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.target);
+      const payload = Object.fromEntries(form.entries());
+      if (!payload.final_category) delete payload.final_category;
+      const res = await fetch('/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        alert(await res.text());
+        return;
+      }
+      location.reload();
+    });
+  </script>
+</body>
+</html>
