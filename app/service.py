@@ -196,7 +196,7 @@ class JobService:
 
         self._maybe_override_to_nas(job)
 
-        is_complete = bool(getattr(torrent, "progress", 0) == 1 or getattr(torrent, "completion_on", 0))
+        is_complete = self._is_torrent_complete(torrent)
         if is_complete and not job.download_complete_at:
             job.download_complete_at = datetime.utcnow()
             self._mark(job, "download_complete")
@@ -257,8 +257,46 @@ class JobService:
         self.logger.info("Promoting clean job %s to %s", job.id, job.final_parent)
         self.qbt.set_location(job.qbt_hash, job.final_parent)
         if job.final_category:
-            self.qbt.set_category(job.qbt_hash, job.final_category)
+            resolved_category = self.qbt.resolve_or_create_category(
+                job.final_category,
+                create_if_missing=self.settings.auto_create_final_category,
+            )
+            if resolved_category != job.final_category:
+                self.logger.info(
+                    "Mapped final category for job %s from '%s' to existing '%s'",
+                    job.id,
+                    job.final_category,
+                    resolved_category,
+                )
+            job.final_category = resolved_category
+            self.qbt.set_category(job.qbt_hash, resolved_category)
         self.qbt.resume(job.qbt_hash)
         job.promoted_at = datetime.utcnow()
         self._mark(job, "done")
         self.logger.info("Job %s complete and resumed for seeding", job.id)
+
+    def _is_torrent_complete(self, torrent) -> bool:
+        progress = float(getattr(torrent, "progress", 0) or 0)
+        amount_left = getattr(torrent, "amount_left", None)
+        completion_on = getattr(torrent, "completion_on", 0) or 0
+        qbt_state = str(getattr(torrent, "state", "") or "")
+
+        if isinstance(amount_left, int) and amount_left > 0:
+            return False
+
+        if progress < 1.0:
+            return False
+
+        not_ready_states = {
+            "downloading",
+            "stalledDL",
+            "forcedDL",
+            "metaDL",
+            "forcedMetaDL",
+            "checkingDL",
+            "checkingResumeData",
+        }
+        if qbt_state in not_ready_states:
+            return False
+
+        return bool(completion_on or progress >= 1.0)

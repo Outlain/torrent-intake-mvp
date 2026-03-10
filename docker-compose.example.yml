@@ -20,6 +20,7 @@ services:
 
       - TI_INTAKE_CATEGORY=intake
       - TI_MANAGED_TAG=torrent_intake
+      - TI_AUTO_CREATE_FINAL_CATEGORY=true
       - TI_LOCAL_STAGING_ROOT=/staging-local
       - TI_NAS_STAGING_ROOT=/downloads/torrent-intake/staging
       - TI_FINAL_PARENT_PREFIX=/downloads
@@ -40,6 +41,8 @@ services:
       - /opt/docker/torrent-intake-data/logs:/app/logs
       - /opt/torrent-intake/staging:/staging-local
       - /mnt/media:/downloads
+      # Optional: shared ClamAV signatures from external updater container
+      # - /mnt/media/docker/clamav/defs:/var/lib/clamav:ro
 
     ports:
       - "8095:8000"

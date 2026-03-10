@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     intake_category: str = "intake"
     managed_tag: str = "torrent_intake"
+    auto_create_final_category: bool = True
 
     local_staging_root: str = "/staging-local"
     nas_staging_root: str = "/downloads/torrent-intake/staging"

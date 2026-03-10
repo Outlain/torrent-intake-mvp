@@ -24,10 +24,10 @@
       <input type="text" name="magnet_uri" placeholder="magnet:?xt=urn:btih:..." required>
     </label>
     <label>Final parent path
-      <input type="text" name="final_parent" placeholder="/downloads/Movies" required>
+      <input type="text" name="final_parent" placeholder="/downloads/Movies" list="final-parent-suggestions" required>
     </label>
     <label>Final category (optional)
-      <input type="text" name="final_category" placeholder="movies">
+      <input type="text" name="final_category" placeholder="Movies" list="category-suggestions">
     </label>
     <label>Staging
       <select name="staging_preference">
@@ -37,6 +37,8 @@
     </label>
     <button type="submit">Submit</button>
   </form>
+  <datalist id="final-parent-suggestions"></datalist>
+  <datalist id="category-suggestions"></datalist>
 
   <h2>Recent jobs</h2>
   <table>
@@ -111,6 +113,38 @@
       }
       location.reload();
     }
+
+    async function loadSuggestions() {
+      const replaceOptions = (listId, values) => {
+        const list = document.getElementById(listId);
+        list.innerHTML = '';
+        values.forEach((value) => {
+          const option = document.createElement('option');
+          option.value = value;
+          list.appendChild(option);
+        });
+      };
+
+      try {
+        const categoriesRes = await fetch('/qbt/categories');
+        if (categoriesRes.ok) {
+          const data = await categoriesRes.json();
+          const categories = Array.isArray(data.categories) ? data.categories : [];
+          replaceOptions('category-suggestions', categories);
+        }
+      } catch (error) {}
+
+      try {
+        const pathsRes = await fetch('/qbt/final-path-suggestions');
+        if (pathsRes.ok) {
+          const data = await pathsRes.json();
+          const paths = Array.isArray(data.paths) ? data.paths : [];
+          replaceOptions('final-parent-suggestions', paths);
+        }
+      } catch (error) {}
+    }
+
+    loadSuggestions();
   </script>
 </body>
 </html>

@@ -95,6 +95,22 @@ def retry_job(job_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@app.get("/qbt/categories")
+def qbt_categories():
+    try:
+        return {"categories": service.qbt.list_categories()}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch qBittorrent categories: {exc}") from exc
+
+
+@app.get("/qbt/final-path-suggestions")
+def qbt_final_path_suggestions():
+    try:
+        return {"paths": service.qbt.list_save_path_suggestions()}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch qBittorrent path suggestions: {exc}") from exc
+
+
 @app.delete("/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_job(job_id: str, db: Session = Depends(get_db)):
     try:

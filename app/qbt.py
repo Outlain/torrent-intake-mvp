@@ -81,3 +81,54 @@ class QbtService:
 
     def set_save_path(self, torrent_hash: str, save_path: str) -> None:
         self.client().torrents_set_save_path(torrent_hashes=torrent_hash, save_path=save_path)
+
+    def list_categories(self) -> list[str]:
+        categories = self.client().torrents_categories()
+        if hasattr(categories, "keys"):
+            return sorted(str(name) for name in categories.keys())
+        return []
+
+    def list_save_path_suggestions(self) -> list[str]:
+        client = self.client()
+        paths: set[str] = set()
+        for torrent in client.torrents_info():
+            path = getattr(torrent, "save_path", None)
+            if isinstance(path, str) and path.strip():
+                paths.add(path.strip())
+        categories = client.torrents_categories()
+        if hasattr(categories, "values"):
+            for info in categories.values():
+                path = getattr(info, "save_path", None) or getattr(info, "savePath", None)
+                if isinstance(path, str) and path.strip():
+                    paths.add(path.strip())
+        return sorted(paths)
+
+    def resolve_or_create_category(self, category: str, *, create_if_missing: bool) -> str:
+        requested = category.strip()
+        if not requested:
+            raise RuntimeError("final category is empty")
+
+        categories = self.client().torrents_categories()
+        existing = {str(name): str(name) for name in categories.keys()}
+        exact = existing.get(requested)
+        if exact:
+            return exact
+
+        lower_map = {name.lower(): name for name in existing}
+        case_match = lower_map.get(requested.lower())
+        if case_match:
+            return case_match
+
+        if not create_if_missing:
+            raise RuntimeError(
+                f"final category '{requested}' not found in qBittorrent; "
+                "enable TI_AUTO_CREATE_FINAL_CATEGORY or create it in qBittorrent first"
+            )
+
+        try:
+            self.client().torrents_create_category(name=requested)
+        except Exception as exc:
+            raise RuntimeError(
+                f"failed to create qBittorrent category '{requested}': {self._format_exc(exc)}"
+            ) from exc
+        return requested

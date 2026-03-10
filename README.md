@@ -47,6 +47,7 @@ Copy `.env.example` to `.env` and set values for your environment.
 | `TI_QBT_USERNAME` | Yes | qBittorrent username |
 | `TI_QBT_PASSWORD` | Yes | qBittorrent password |
 | `TI_QBT_VERIFY_CERTIFICATE` | Yes | TLS cert verification for qBittorrent |
+| `TI_AUTO_CREATE_FINAL_CATEGORY` | Yes | If `true`, create missing final category in qBittorrent |
 | `TI_LOCAL_STAGING_ROOT` | Yes | Must be `/staging-local` in container |
 | `TI_NAS_STAGING_ROOT` | Yes | Usually `/downloads/torrent-intake/staging` |
 | `TI_FINAL_PARENT_PREFIX` | Yes | Must be `/downloads` |
@@ -105,6 +106,10 @@ See `portainer-stack.example.yml` and adjust host paths, qBittorrent endpoint, a
 - `POST /jobs` submit intake job
 - `GET /jobs` list jobs
 - `GET /jobs/{job_id}` job detail
+- `POST /jobs/{job_id}/retry` retry errored job
+- `DELETE /jobs/{job_id}` delete terminal job from intake DB
+- `GET /qbt/categories` list qBittorrent categories
+- `GET /qbt/final-path-suggestions` list known qB save path suggestions
 - `POST /events/qbt-complete` JSON completion event
 - `POST /events/qbt-complete-form` form completion event
 - `GET /health` health endpoint
@@ -137,6 +142,16 @@ Client -> Intake API -> qBittorrent (staging path)
           Delete torrent+files     Move to final_parent
           Telegram alert sent       Optional final category
 ```
+
+## Completion Logic
+
+The intake worker only moves to scan/promotion when completion checks pass:
+
+- `progress >= 1.0`
+- `amount_left == 0` (when available)
+- qBittorrent state is not one of active download/checking states
+
+After that it pauses the torrent, scans content, and only then promotes and resumes for seeding.
 
 ## What Should Not Be Committed
 
