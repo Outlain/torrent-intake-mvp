@@ -49,7 +49,7 @@
     }
 
     .hero {
-      margin-bottom: 18px;
+      margin-bottom: 0;
     }
 
     .hero-copy {
@@ -113,6 +113,12 @@
 
     .form-panel {
       padding: 24px;
+      margin-bottom: 0;
+    }
+
+    .top-layout {
+      display: grid;
+      gap: 18px;
       margin-bottom: 18px;
     }
 
@@ -490,85 +496,98 @@
         line-height: 1.45;
       }
     }
+
+    @media (min-width: 1520px) {
+      .top-layout {
+        grid-template-columns: minmax(360px, 0.78fr) minmax(780px, 1.22fr);
+        align-items: start;
+      }
+
+      .top-layout .meta-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="shell">
-    <section class="hero panel hero-copy">
-        <div class="eyebrow">Torrent Intake Control Plane</div>
-        <h1>{{ title }}</h1>
-        <p class="lede">
-          Submit a magnet, stage it safely, scan on completion, and only promote clean content into the final library.
-          The form defaults to the configured main final root so you are not retyping the same prefix for every intake.
-        </p>
-        <div class="meta-grid">
-          <div class="meta-card">
-            <span class="meta-label">Final Root</span>
-            <span class="meta-value">{{ settings.final_parent_prefix }}</span>
+    <div class="top-layout">
+      <section class="hero panel hero-copy">
+          <div class="eyebrow">Torrent Intake Control Plane</div>
+          <h1>{{ title }}</h1>
+          <p class="lede">
+            Submit a magnet, stage it safely, scan on completion, and only promote clean content into the final library.
+            The form defaults to the configured main final root so you are not retyping the same prefix for every intake.
+          </p>
+          <div class="meta-grid">
+            <div class="meta-card">
+              <span class="meta-label">Final Root</span>
+              <span class="meta-value">{{ settings.final_parent_prefix }}</span>
+            </div>
+            <div class="meta-card">
+              <span class="meta-label">Local Stage</span>
+              <span class="meta-value">{{ settings.local_staging_root }}</span>
+            </div>
+            <div class="meta-card">
+              <span class="meta-label">NAS Stage</span>
+              <span class="meta-value">{{ settings.nas_staging_root }}</span>
+            </div>
           </div>
-          <div class="meta-card">
-            <span class="meta-label">Local Stage</span>
-            <span class="meta-value">{{ settings.local_staging_root }}</span>
+      </section>
+
+      <div class="panel form-panel">
+        <h2 class="section-title">New Intake</h2>
+        <p class="section-copy">Paste the full magnet URI, confirm the destination, and submit. The final path starts at the configured root and the form keeps category/path values in place between submissions.</p>
+
+        <form id="job-form">
+          <div class="field-grid">
+            <label class="field-wide">
+              <span>Magnet Link</span>
+              <textarea id="magnet-input" class="mono" name="magnet_uri" placeholder="magnet:?xt=urn:btih:..." spellcheck="false" required></textarea>
+              <span class="hint">Large magnets stay visible here so malformed trackers or truncated hashes are easier to spot.</span>
+            </label>
+
+            <label class="field-wide">
+              <span>Final Parent Path</span>
+              <input
+                id="final-parent-input"
+                class="mono"
+                type="text"
+                name="final_parent"
+                list="final-parent-suggestions"
+                autocomplete="off"
+                data-default-prefix="{{ settings.final_parent_prefix }}"
+                placeholder="{{ settings.final_parent_prefix }}/"
+                required>
+              <span class="hint">Autocomplete suggests live directories under the allowed final roots. Clear the field and type `/` to browse those roots, while the default prefill stays on the main root.</span>
+            </label>
+
+            <label class="field">
+              <span>Final Category</span>
+              <input id="final-category-input" type="text" name="final_category" list="category-suggestions" placeholder="Movies" autocomplete="off">
+              <span class="hint">Optional. Existing qB categories are suggested and missing categories can be auto-created if enabled.</span>
+            </label>
+
+            <label class="field">
+              <span>Staging Preference</span>
+              <select name="staging_preference">
+                <option value="local">Local</option>
+                <option value="nas">NAS</option>
+              </select>
+              <span class="hint">Local is default. Large torrents can still be pushed to NAS automatically by threshold.</span>
+            </label>
           </div>
-          <div class="meta-card">
-            <span class="meta-label">NAS Stage</span>
-            <span class="meta-value">{{ settings.nas_staging_root }}</span>
+
+          <div class="actions-row">
+            <button id="submit-button" class="button-primary" type="submit">Submit Intake Job</button>
+            <button id="refresh-jobs-button" class="button-secondary" type="button">Refresh Jobs</button>
+            <span id="form-status" class="form-status"></span>
           </div>
-        </div>
-    </section>
+        </form>
 
-    <div class="panel form-panel">
-      <h2 class="section-title">New Intake</h2>
-      <p class="section-copy">Paste the full magnet URI, confirm the destination, and submit. The final path starts at the configured root and the form keeps category/path values in place between submissions.</p>
-
-      <form id="job-form">
-        <div class="field-grid">
-          <label class="field-wide">
-            <span>Magnet Link</span>
-            <textarea id="magnet-input" class="mono" name="magnet_uri" placeholder="magnet:?xt=urn:btih:..." spellcheck="false" required></textarea>
-            <span class="hint">Large magnets stay visible here so malformed trackers or truncated hashes are easier to spot.</span>
-          </label>
-
-          <label class="field-wide">
-            <span>Final Parent Path</span>
-            <input
-              id="final-parent-input"
-              class="mono"
-              type="text"
-              name="final_parent"
-              list="final-parent-suggestions"
-              autocomplete="off"
-              data-default-prefix="{{ settings.final_parent_prefix }}"
-              placeholder="{{ settings.final_parent_prefix }}/"
-              required>
-            <span class="hint">Autocomplete suggests live directories under the allowed final roots. Clear the field and type `/` to browse those roots, while the default prefill stays on the main root.</span>
-          </label>
-
-          <label class="field">
-            <span>Final Category</span>
-            <input id="final-category-input" type="text" name="final_category" list="category-suggestions" placeholder="Movies" autocomplete="off">
-            <span class="hint">Optional. Existing qB categories are suggested and missing categories can be auto-created if enabled.</span>
-          </label>
-
-          <label class="field">
-            <span>Staging Preference</span>
-            <select name="staging_preference">
-              <option value="local">Local</option>
-              <option value="nas">NAS</option>
-            </select>
-            <span class="hint">Local is default. Large torrents can still be pushed to NAS automatically by threshold.</span>
-          </label>
-        </div>
-
-        <div class="actions-row">
-          <button id="submit-button" class="button-primary" type="submit">Submit Intake Job</button>
-          <button id="refresh-jobs-button" class="button-secondary" type="button">Refresh Jobs</button>
-          <span id="form-status" class="form-status"></span>
-        </div>
-      </form>
-
-      <datalist id="final-parent-suggestions"></datalist>
-      <datalist id="category-suggestions"></datalist>
+        <datalist id="final-parent-suggestions"></datalist>
+        <datalist id="category-suggestions"></datalist>
+      </div>
     </div>
 
     <div class="panel jobs-panel">
