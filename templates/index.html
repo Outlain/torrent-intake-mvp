@@ -638,12 +638,26 @@
               <span class="meta-value">{{ settings.final_parent_prefix }}</span>
             </div>
             <div class="meta-card">
+              <span class="meta-label">Extra Final Roots</span>
+              <span class="meta-value">
+                {% if settings.extra_final_parent_prefixes %}
+                  {{ settings.extra_final_parent_prefixes | join(', ') }}
+                {% else %}
+                  None configured
+                {% endif %}
+              </span>
+            </div>
+            <div class="meta-card">
               <span class="meta-label">Local Stage</span>
               <span class="meta-value">{{ settings.local_staging_root }}</span>
             </div>
             <div class="meta-card">
               <span class="meta-label">NAS Stage</span>
               <span class="meta-value">{{ settings.nas_staging_root }}</span>
+            </div>
+            <div class="meta-card">
+              <span class="meta-label">Local Max Before NAS</span>
+              <span class="meta-value">{{ settings.local_max_gib }} GiB</span>
             </div>
           </div>
       </section>

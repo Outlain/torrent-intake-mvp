@@ -65,6 +65,14 @@ class Settings(BaseSettings):
             unique_values.append(normalized)
         return unique_values
 
+    @property
+    def extra_final_parent_prefixes(self) -> list[str]:
+        allowed = self.allowed_final_parent_prefixes
+        if not allowed:
+            return []
+        primary = allowed[0]
+        return [value for value in allowed if value != primary]
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
