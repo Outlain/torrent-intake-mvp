@@ -20,7 +20,9 @@ Given a magnet link and a final destination path, the app:
 
 - Default staging mode is local staging at `/staging-local`.
 - Optional staging mode is NAS staging at `/downloads/torrent-intake/staging`.
-- If a job was requested as `local` and the torrent size exceeds `TI_LOCAL_MAX_GIB`, the app overrides staging to NAS.
+- `TI_LOCAL_MAX_GIB` is a hard per-torrent cutoff for local staging; larger local-preference jobs are moved to NAS staging automatically.
+- `TI_LOCAL_OVERFLOW_POLICY=queue` is the default for aggregate local-space pressure on smaller local jobs: when local capacity would be exceeded, those jobs are paused and resumed automatically when space becomes available again.
+- If you set `TI_LOCAL_OVERFLOW_POLICY=nas`, the app moves those aggregate-overflow local jobs to NAS staging instead of queueing them.
 - If a job was requested as `nas`, it stays on NAS (no move back to local).
 - Final paths must live under an explicit allowlist of approved roots. By default that is just `TI_FINAL_PARENT_PREFIX` (`/downloads`).
 - Malware scan runs before any promotion step.
@@ -52,7 +54,9 @@ Copy `.env.example` to `.env` and set values for your environment.
 | `TI_NAS_STAGING_ROOT` | Yes | Usually `/downloads/torrent-intake/staging` |
 | `TI_FINAL_PARENT_PREFIX` | Yes | Default final root used for prefill/autocomplete |
 | `TI_FINAL_PARENT_PREFIXES` | Optional | Comma-separated allowlist of additional approved final roots |
-| `TI_LOCAL_MAX_GIB` | Yes | Local-to-NAS override threshold |
+| `TI_LOCAL_OVERFLOW_POLICY` | Yes | Aggregate overflow behavior for local jobs under the size limit: `queue` pauses for local space, `nas` auto-moves them to NAS staging |
+| `TI_LOCAL_MAX_GIB` | Yes | Hard per-torrent local staging cutoff; larger local-preference jobs move to NAS staging automatically |
+| `TI_LOCAL_FREE_SPACE_BUFFER_GIB` | Yes | Free-space buffer kept on local staging mount when aggregating active local reservations |
 | `TI_COMPLETION_EVENT_TOKEN` | Optional | Shared secret for qB completion callback |
 | `TI_CLAMDSCAN_BINARY` | Yes | Malware scanner binary |
 | `TI_CLAMDSCAN_ARGS` | Yes | Scanner args |
@@ -155,6 +159,20 @@ The intake worker only moves to scan/promotion when completion checks pass:
 - qBittorrent state is not one of active download/checking states
 
 After that it pauses the torrent, scans content, and only then promotes and resumes for seeding.
+
+## Local Capacity Guard
+
+- `TI_LOCAL_MAX_GIB` remains a hard per-torrent cutoff for local staging.
+- If a local-preference torrent is larger than `TI_LOCAL_MAX_GIB`, intake moves it to NAS staging automatically.
+- The app measures actual free space on `TI_LOCAL_STAGING_ROOT`.
+- It subtracts `TI_LOCAL_FREE_SPACE_BUFFER_GIB` as a safety margin.
+- It then reserves the remaining bytes for each active job still downloading locally.
+- It also reserves remaining bytes for other qBittorrent downloads already using the local staging mount, even if they were not submitted through intake.
+- If a newer local job is still under `TI_LOCAL_MAX_GIB` but would push aggregate reserved bytes past the safe free-space budget:
+  - with `TI_LOCAL_OVERFLOW_POLICY=queue`, the job is paused in `waiting_for_local_space` and resumes automatically when space becomes available
+  - with `TI_LOCAL_OVERFLOW_POLICY=nas`, the job is moved to NAS staging automatically
+- Operators can also manually move queued `waiting_for_local_space` jobs to NAS from the Recent Jobs toolbar.
+- This decision uses qBittorrent metadata and remaining bytes only; the intake app does not query the public internet for torrent size.
 
 ## qBittorrent Completion Hook
 

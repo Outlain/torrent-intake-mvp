@@ -107,6 +107,15 @@ class QbtService:
     def get_torrent(self, torrent_hash: str):
         return self._get_torrent_with_client(self.client(), torrent_hash)
 
+    def get_torrents(self, torrent_hashes: list[str]):
+        hashes = [torrent_hash for torrent_hash in dict.fromkeys(torrent_hashes) if torrent_hash]
+        if not hashes:
+            return []
+        return list(self.client().torrents_info(torrent_hashes="|".join(hashes)))
+
+    def list_torrents(self):
+        return list(self.client().torrents_info())
+
     def pause(self, torrent_hash: str) -> None:
         self.client().torrents_pause(torrent_hashes=torrent_hash)
 

@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,7 +24,9 @@ class Settings(BaseSettings):
     final_parent_prefix: str = "/downloads"
     final_parent_prefixes: str | None = None
 
+    local_overflow_policy: Literal["queue", "nas"] = "queue"
     local_max_gib: int = 200
+    local_free_space_buffer_gib: int = 5
     polling_interval_seconds: int = 300
     completion_grace_seconds: int = 15
     completion_event_token: str | None = None
@@ -46,6 +49,10 @@ class Settings(BaseSettings):
     @property
     def local_max_bytes(self) -> int:
         return self.local_max_gib * 1024 * 1024 * 1024
+
+    @property
+    def local_free_space_buffer_bytes(self) -> int:
+        return self.local_free_space_buffer_gib * 1024 * 1024 * 1024
 
     @property
     def allowed_final_parent_prefixes(self) -> list[str]:

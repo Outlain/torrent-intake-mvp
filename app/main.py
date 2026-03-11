@@ -110,6 +110,11 @@ def bulk_retry_jobs(payload: JobSelectionIn, db: Session = Depends(get_db)):
     return service.retry_jobs(db, job_ids=payload.job_ids)
 
 
+@app.post("/jobs/bulk-move-to-nas", response_model=JobBulkResult)
+def bulk_move_waiting_jobs_to_nas(payload: JobSelectionIn, db: Session = Depends(get_db)):
+    return service.move_waiting_jobs_to_nas(db, job_ids=payload.job_ids)
+
+
 @app.get("/qbt/categories")
 def qbt_categories():
     try:

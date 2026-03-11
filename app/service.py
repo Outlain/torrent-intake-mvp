@@ -2,6 +2,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 import logging
 from pathlib import Path
+import shutil
 from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -65,6 +66,7 @@ class JobService:
                 category=self.settings.intake_category,
             )
             self._resolve_hash_for_job(db, job)
+            self._evaluate_staging_now(db, job)
         except TorrentAlreadyExistsError as exc:
             error_text = self._duplicate_torrent_message(
                 db,
@@ -108,10 +110,13 @@ class JobService:
                     category=self.settings.intake_category,
                 )
                 self._resolve_hash_for_job(db, job)
+                self._evaluate_staging_now(db, job)
                 return job
 
             self._sync_job_from_torrent(job, torrent)
-            job.state = self._state_for_retry(job, torrent)
+            self._apply_local_staging_policy(db, job, torrent)
+            if job.state != "waiting_for_local_space":
+                job.state = self._state_for_retry(job, torrent)
             job.is_terminal = False
             db.add(job)
             db.commit()
@@ -130,7 +135,9 @@ class JobService:
             if existing_torrent is not None and tracked_job is None:
                 job.qbt_hash = getattr(existing_torrent, "hash", None) or exc.torrent_hash
                 self._sync_job_from_torrent(job, existing_torrent)
-                job.state = self._state_for_retry(job, existing_torrent)
+                self._apply_local_staging_policy(db, job, existing_torrent)
+                if job.state != "waiting_for_local_space":
+                    job.state = self._state_for_retry(job, existing_torrent)
                 job.is_terminal = False
                 db.add(job)
                 db.commit()
@@ -171,11 +178,52 @@ class JobService:
     def delete_jobs(self, db: Session, *, job_ids: list[str]) -> dict[str, object]:
         return self._bulk_apply(job_ids, lambda selected_id: self.delete_job(db, job_id=selected_id))
 
+    def move_waiting_jobs_to_nas(self, db: Session, *, job_ids: list[str]) -> dict[str, object]:
+        return self._bulk_apply(job_ids, lambda selected_id: self.move_waiting_job_to_nas(db, job_id=selected_id))
+
     def delete_jobs_by_states(self, db: Session, *, states: set[str]) -> dict[str, object]:
         if not states:
             return self._empty_bulk_result()
         jobs = list(db.scalars(select(Job).where(Job.state.in_(tuple(states))).order_by(Job.created_at.desc())))
         return self.delete_jobs(db, job_ids=[job.id for job in jobs])
+
+    def move_waiting_job_to_nas(self, db: Session, *, job_id: str) -> Job:
+        job = db.get(Job, job_id)
+        if not job:
+            raise LookupError("Job not found")
+        if job.state != "waiting_for_local_space":
+            raise ValueError("Only jobs waiting for local space can be moved to NAS")
+        if job.staging_preference != "local" or job.staging_actual != "local":
+            raise ValueError("Only queued local-staging jobs can be moved to NAS")
+        if not job.qbt_hash:
+            raise ValueError("Queued job is not linked to a qBittorrent hash yet")
+
+        free_bytes, safe_free_bytes, reserved_before_current, current_remaining_bytes = self._local_capacity_snapshot(
+            db,
+            job,
+            self.qbt.get_torrent(job.qbt_hash),
+        )
+        try:
+            self._move_local_job_to_nas(
+                job,
+                reason="manual_move_to_nas",
+                free_bytes=free_bytes,
+                safe_free_bytes=safe_free_bytes,
+                reserved_before_current=reserved_before_current,
+                current_remaining_bytes=current_remaining_bytes,
+            )
+            db.add(job)
+            db.commit()
+            db.refresh(job)
+            self.process_waiting_for_local_space(db)
+            db.refresh(job)
+            return job
+        except Exception as exc:
+            self.logger.exception("Failed to move queued job %s to NAS", job.id)
+            self._mark(job, "error", error=f"manual move to NAS failed: {exc}")
+            db.add(job)
+            db.commit()
+            raise RuntimeError(str(exc)) from exc
 
     def suggest_final_paths(self, prefix: str | None) -> list[str]:
         roots = [Path(path).resolve() for path in self.settings.allowed_final_parent_prefixes]
@@ -385,8 +433,12 @@ class JobService:
         if job.is_terminal:
             return job
         try:
+            was_local_staging = job.staging_actual == "local"
             self._process_one(db, job, ignore_event_grace=ignore_event_grace)
             db.refresh(job)
+            if was_local_staging and job.is_terminal:
+                self.process_waiting_for_local_space(db)
+                db.refresh(job)
             return job
         except Exception as exc:
             self.logger.exception("Immediate processing failed for job %s", job.id)
@@ -397,12 +449,30 @@ class JobService:
             raise RuntimeError(str(exc)) from exc
 
     def process_nonterminal_jobs(self, db: Session) -> None:
-        jobs = list(db.scalars(select(Job).where(Job.is_terminal == False)))
+        jobs = list(db.scalars(select(Job).where(Job.is_terminal == False).order_by(Job.created_at.asc())))
         for job in jobs:
             try:
                 self._process_one(db, job, ignore_event_grace=False)
             except Exception as exc:
                 self.logger.exception("Worker failed for job %s", job.id)
+                self._mark(job, "error", error=str(exc))
+                db.add(job)
+                db.commit()
+
+    def process_waiting_for_local_space(self, db: Session) -> None:
+        jobs = list(
+            db.scalars(
+                select(Job)
+                .where(Job.is_terminal == False)
+                .where(Job.state == "waiting_for_local_space")
+                .order_by(Job.created_at.asc())
+            )
+        )
+        for job in jobs:
+            try:
+                self._process_one(db, job, ignore_event_grace=False)
+            except Exception as exc:
+                self.logger.exception("Queued local-space job failed for job %s", job.id)
                 self._mark(job, "error", error=str(exc))
                 db.add(job)
                 db.commit()
@@ -424,7 +494,7 @@ class JobService:
         qbt_state = getattr(torrent, "state", None)
         self._sync_job_from_torrent(job, torrent)
 
-        self._maybe_override_to_nas(job)
+        self._apply_local_staging_policy(db, job, torrent)
 
         is_complete = self._is_torrent_complete(torrent)
         if is_complete and not job.download_complete_at:
@@ -441,21 +511,200 @@ class JobService:
         db.add(job)
         db.commit()
 
-    def _maybe_override_to_nas(self, job: Job) -> None:
-        if job.staging_preference != "local":
+    def _evaluate_staging_now(self, db: Session, job: Job) -> None:
+        if not job.qbt_hash:
             return
-        if job.staging_actual != "local":
+        torrent = self.qbt.get_torrent(job.qbt_hash)
+        if torrent is None:
             return
-        if job.size_bytes is None or job.size_bytes <= self.settings.local_max_bytes:
-            return
+        self._sync_job_from_torrent(job, torrent)
+        self._apply_local_staging_policy(db, job, torrent)
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+    def _remaining_bytes_for_torrent(self, torrent, *, fallback_size_bytes: int | None = None) -> int | None:
+        amount_left = getattr(torrent, "amount_left", None)
+        if isinstance(amount_left, int) and amount_left >= 0:
+            return amount_left
+
+        total_size = getattr(torrent, "size", None) or getattr(torrent, "total_size", None) or fallback_size_bytes
+        if not isinstance(total_size, int) or total_size <= 0:
+            return self.settings.local_max_bytes
+
+        progress = float(getattr(torrent, "progress", 0) or 0)
+        if progress <= 0:
+            return total_size
+        if progress >= 1.0:
+            return 0
+        return max(int(total_size * (1.0 - progress)), 0)
+
+    def _path_within_local_staging(self, path_value: str | None) -> bool:
+        if not path_value:
+            return False
+        local_root = self.settings.local_staging_root.rstrip("/")
+        normalized = path_value.rstrip("/")
+        if normalized == local_root or normalized.startswith(f"{local_root}/"):
+            return True
+        try:
+            local_root_path = Path(local_root).resolve()
+            candidate = Path(normalized).resolve()
+            return candidate == local_root_path or local_root_path in candidate.parents
+        except OSError:
+            return False
+
+    def _torrent_uses_local_staging(self, torrent) -> bool:
+        save_path = getattr(torrent, "save_path", None)
+        content_path = getattr(torrent, "content_path", None)
+        return self._path_within_local_staging(save_path) or self._path_within_local_staging(content_path)
+
+    def _local_capacity_snapshot(self, db: Session, current_job: Job, current_torrent) -> tuple[int, int, int, int]:
+        local_jobs = list(
+            db.scalars(
+                select(Job)
+                .where(Job.is_terminal == False)
+                .where(Job.staging_preference == "local")
+                .where(Job.staging_actual == "local")
+                .where(Job.qbt_hash.is_not(None))
+                .order_by(Job.created_at.asc())
+            )
+        )
+        all_torrents = self.qbt.list_torrents()
+        torrents_by_hash = {getattr(torrent, "hash", None): torrent for torrent in all_torrents}
+        if current_job.qbt_hash:
+            torrents_by_hash[current_job.qbt_hash] = current_torrent
+        local_job_hashes = {job.qbt_hash for job in local_jobs if job.qbt_hash}
+
+        free_bytes = shutil.disk_usage(self.settings.local_staging_root).free
+        safe_free_bytes = max(free_bytes - self.settings.local_free_space_buffer_bytes, 0)
+        reserved_before_current = 0
+        current_remaining_bytes = 0
+        for torrent in all_torrents:
+            torrent_hash = getattr(torrent, "hash", None)
+            if torrent_hash in local_job_hashes:
+                continue
+            if not self._torrent_uses_local_staging(torrent):
+                continue
+            remaining_bytes = self._remaining_bytes_for_torrent(torrent)
+            if remaining_bytes is None or remaining_bytes <= 0:
+                continue
+            reserved_before_current += remaining_bytes
+
+        for local_job in local_jobs:
+            torrent = torrents_by_hash.get(local_job.qbt_hash)
+            remaining_bytes = self._remaining_bytes_for_torrent(torrent, fallback_size_bytes=local_job.size_bytes)
+            if remaining_bytes is None or remaining_bytes <= 0:
+                continue
+            if local_job.id == current_job.id:
+                current_remaining_bytes = remaining_bytes
+                break
+            reserved_before_current += remaining_bytes
+
+        return free_bytes, safe_free_bytes, reserved_before_current, current_remaining_bytes
+
+    def _move_local_job_to_nas(self, job: Job, *, reason: str, free_bytes: int, safe_free_bytes: int,
+                               reserved_before_current: int, current_remaining_bytes: int) -> None:
+        self.logger.info(
+            "Moving job %s to NAS staging reason=%s free_bytes=%s safe_free_bytes=%s reserved_before_current=%s current_remaining_bytes=%s",
+            job.id,
+            reason,
+            free_bytes,
+            safe_free_bytes,
+            reserved_before_current,
+            current_remaining_bytes,
+        )
         self.qbt.pause(job.qbt_hash)
         self.qbt.set_save_path(job.qbt_hash, self.settings.nas_staging_root)
         self.qbt.resume(job.qbt_hash)
         job.staging_actual = "nas"
         job.staging_root_actual = self.settings.nas_staging_root
         job.staging_overridden = True
-        job.override_reason = "size_exceeds_threshold"
+        job.override_reason = reason
         self._mark(job, "downloading")
+
+    def _queue_local_job_for_space(self, job: Job, *, reason: str, free_bytes: int, safe_free_bytes: int,
+                                   reserved_before_current: int, current_remaining_bytes: int) -> None:
+        self.logger.info(
+            "Queueing job %s for local staging space reason=%s free_bytes=%s safe_free_bytes=%s reserved_before_current=%s current_remaining_bytes=%s",
+            job.id,
+            reason,
+            free_bytes,
+            safe_free_bytes,
+            reserved_before_current,
+            current_remaining_bytes,
+        )
+        self.qbt.pause(job.qbt_hash)
+        job.staging_actual = "local"
+        job.staging_root_actual = self.settings.local_staging_root
+        job.staging_overridden = False
+        job.override_reason = None
+        self._mark(job, "waiting_for_local_space")
+
+    def _resume_local_job_from_queue(self, job: Job) -> None:
+        self.logger.info("Resuming job %s after local staging space became available", job.id)
+        self.qbt.resume(job.qbt_hash)
+        self._mark(job, "downloading")
+
+    def _apply_local_staging_policy(self, db: Session, job: Job, torrent) -> None:
+        if job.staging_preference != "local":
+            return
+        if job.staging_actual != "local":
+            return
+        qbt_state = str(getattr(torrent, "state", "") or "")
+        if job.size_bytes is not None and job.size_bytes > self.settings.local_max_bytes:
+            free_bytes = shutil.disk_usage(self.settings.local_staging_root).free
+            self._move_local_job_to_nas(
+                job,
+                reason="size_exceeds_threshold",
+                free_bytes=free_bytes,
+                safe_free_bytes=max(free_bytes - self.settings.local_free_space_buffer_bytes, 0),
+                reserved_before_current=0,
+                current_remaining_bytes=job.size_bytes,
+            )
+            return
+
+        free_bytes, safe_free_bytes, reserved_before_current, current_remaining_bytes = self._local_capacity_snapshot(
+            db,
+            job,
+            torrent,
+        )
+        if current_remaining_bytes <= 0:
+            return
+        self.logger.debug(
+            "Local capacity check job=%s free_bytes=%s safe_free_bytes=%s reserved_before_current=%s current_remaining_bytes=%s",
+            job.id,
+            free_bytes,
+            safe_free_bytes,
+            reserved_before_current,
+            current_remaining_bytes,
+        )
+        if reserved_before_current + current_remaining_bytes <= safe_free_bytes:
+            if job.state == "waiting_for_local_space":
+                self._resume_local_job_from_queue(job)
+            return
+
+        if self.settings.local_overflow_policy == "nas":
+            self._move_local_job_to_nas(
+                job,
+                reason="insufficient_local_space",
+                free_bytes=free_bytes,
+                safe_free_bytes=safe_free_bytes,
+                reserved_before_current=reserved_before_current,
+                current_remaining_bytes=current_remaining_bytes,
+            )
+            return
+
+        if job.state == "waiting_for_local_space" and qbt_state in {"pausedDL", "pausedUP"}:
+            return
+
+        self._queue_local_job_for_space(
+            job,
+            reason="insufficient_local_space",
+            free_bytes=free_bytes,
+            safe_free_bytes=safe_free_bytes,
+            reserved_before_current=reserved_before_current,
+            current_remaining_bytes=current_remaining_bytes,
+        )
 
     def _scan_and_finalize(self, job: Job) -> None:
         if not job.content_path:
