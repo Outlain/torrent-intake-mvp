@@ -6,19 +6,19 @@
   <title>{{ title }}</title>
   <style>
     :root {
-      --bg: #f3efe6;
-      --surface: rgba(255, 252, 245, 0.92);
-      --surface-strong: #fffaf0;
-      --ink: #20160f;
-      --muted: #675649;
-      --line: rgba(90, 66, 47, 0.18);
-      --accent: #b55d2d;
-      --accent-deep: #7d3415;
-      --accent-soft: rgba(181, 93, 45, 0.12);
-      --success: #1d6b49;
-      --warning: #9b5f11;
-      --danger: #992f2f;
-      --shadow: 0 24px 70px rgba(46, 28, 16, 0.14);
+      --bg: #0a111a;
+      --surface: rgba(13, 21, 33, 0.9);
+      --surface-strong: #121d2d;
+      --ink: #edf3fc;
+      --muted: #98a8bf;
+      --line: rgba(152, 168, 191, 0.16);
+      --accent: #de7d36;
+      --accent-deep: #a54916;
+      --accent-soft: rgba(222, 125, 54, 0.16);
+      --success: #4fd18c;
+      --warning: #e9b24d;
+      --danger: #ff7272;
+      --shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
       --radius: 24px;
     }
 
@@ -29,19 +29,20 @@
       font-family: "Avenir Next", "Segoe UI", sans-serif;
       color: var(--ink);
       background:
-        radial-gradient(circle at top left, rgba(181, 93, 45, 0.22), transparent 28%),
-        radial-gradient(circle at top right, rgba(38, 107, 73, 0.16), transparent 22%),
-        linear-gradient(180deg, #f7f1e8 0%, #efe5d5 100%);
+        radial-gradient(circle at top left, rgba(222, 125, 54, 0.18), transparent 24%),
+        radial-gradient(circle at top right, rgba(79, 209, 140, 0.12), transparent 20%),
+        radial-gradient(circle at bottom center, rgba(43, 97, 163, 0.14), transparent 28%),
+        linear-gradient(180deg, #09111b 0%, #0d1725 52%, #08111a 100%);
     }
 
     .shell {
-      width: min(1180px, calc(100vw - 32px));
+      width: min(1680px, calc(100vw - 32px));
       margin: 28px auto 48px;
     }
 
     .panel {
       background: var(--surface);
-      border: 1px solid rgba(255, 255, 255, 0.55);
+      border: 1px solid var(--line);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       backdrop-filter: blur(16px);
@@ -61,7 +62,7 @@
       gap: 8px;
       padding: 7px 12px;
       border-radius: 999px;
-      background: rgba(32, 22, 15, 0.06);
+      background: rgba(255, 255, 255, 0.06);
       color: var(--muted);
       font-size: 0.83rem;
       letter-spacing: 0.04em;
@@ -92,7 +93,7 @@
     .meta-card {
       padding: 14px 16px;
       border-radius: 18px;
-      background: rgba(255, 255, 255, 0.62);
+      background: rgba(255, 255, 255, 0.04);
       border: 1px solid var(--line);
     }
 
@@ -168,7 +169,7 @@
       padding: 13px 14px;
       border-radius: 16px;
       border: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.82);
+      background: rgba(6, 11, 18, 0.72);
       color: var(--ink);
       transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
     }
@@ -177,9 +178,9 @@
     textarea:focus,
     select:focus {
       outline: none;
-      border-color: rgba(181, 93, 45, 0.55);
-      box-shadow: 0 0 0 4px rgba(181, 93, 45, 0.12);
-      background: #fffdf8;
+      border-color: rgba(222, 125, 54, 0.58);
+      box-shadow: 0 0 0 4px rgba(222, 125, 54, 0.14);
+      background: rgba(10, 16, 26, 0.96);
     }
 
     textarea {
@@ -216,7 +217,7 @@
 
     .button-secondary {
       padding: 11px 15px;
-      background: rgba(32, 22, 15, 0.08);
+      background: rgba(255, 255, 255, 0.08);
       color: var(--ink);
       font-weight: 600;
     }
@@ -271,16 +272,35 @@
     }
 
     .table-wrap {
-      overflow: auto;
+      display: block;
+      overflow-x: auto;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-color: rgba(152, 168, 191, 0.45) transparent;
       border-radius: 20px;
       border: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.7);
+      background: rgba(255, 255, 255, 0.03);
+      overscroll-behavior-x: contain;
+    }
+
+    .table-wrap::-webkit-scrollbar {
+      height: 12px;
+      width: 12px;
+    }
+
+    .table-wrap::-webkit-scrollbar-thumb {
+      background: rgba(152, 168, 191, 0.35);
+      border-radius: 999px;
+    }
+
+    .table-wrap::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.02);
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 940px;
+      min-width: 1280px;
     }
 
     th,
@@ -289,18 +309,20 @@
       border-bottom: 1px solid var(--line);
       text-align: left;
       vertical-align: top;
-      overflow-wrap: anywhere;
+      overflow-wrap: normal;
+      word-break: normal;
     }
 
     th {
       position: sticky;
       top: 0;
-      background: rgba(248, 241, 231, 0.96);
+      background: rgba(18, 29, 45, 0.96);
       font-size: 0.8rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--muted);
       z-index: 1;
+      white-space: nowrap;
     }
 
     tbody tr:last-child td {
@@ -308,14 +330,63 @@
     }
 
     tbody tr:hover {
-      background: rgba(181, 93, 45, 0.05);
+      background: rgba(222, 125, 54, 0.07);
     }
 
     .mono {
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
       font-size: 0.86rem;
       line-height: 1.45;
+    }
+
+    .cell-id,
+    .cell-name,
+    .cell-final-parent,
+    .cell-hash,
+    .cell-last-error {
+      overflow-wrap: anywhere;
       word-break: break-word;
+    }
+
+    .cell-id {
+      min-width: 170px;
+      max-width: 220px;
+    }
+
+    .cell-name {
+      min-width: 250px;
+    }
+
+    .cell-state {
+      min-width: 126px;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    .cell-final-parent {
+      min-width: 230px;
+    }
+
+    .cell-stage {
+      min-width: 90px;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    .cell-hash {
+      min-width: 210px;
+      max-width: 280px;
+    }
+
+    .cell-last-error {
+      min-width: 320px;
+      max-width: 460px;
+    }
+
+    .cell-actions {
+      min-width: 150px;
+      white-space: nowrap;
+      vertical-align: middle;
     }
 
     .state-pill {
@@ -329,6 +400,7 @@
       letter-spacing: 0.04em;
       background: rgba(32, 22, 15, 0.08);
       color: var(--muted);
+      white-space: nowrap;
     }
 
     .state-pill[data-state="downloading"],
@@ -358,8 +430,8 @@
     }
 
     .job-actions {
-      display: flex;
-      flex-wrap: wrap;
+      display: inline-flex;
+      flex-wrap: nowrap;
       gap: 8px;
     }
 
@@ -367,8 +439,9 @@
       padding: 8px 12px;
       font-size: 0.84rem;
       font-weight: 700;
-      background: rgba(32, 22, 15, 0.08);
+      background: rgba(255, 255, 255, 0.08);
       color: var(--ink);
+      white-space: nowrap;
     }
 
     .job-action.danger {
@@ -384,7 +457,7 @@
 
     @media (max-width: 720px) {
       .shell {
-        width: min(100vw - 20px, 1180px);
+        width: calc(100vw - 16px);
         margin: 16px auto 28px;
       }
 
@@ -407,6 +480,14 @@
       .button-primary,
       .button-secondary {
         width: 100%;
+      }
+
+      table {
+        min-width: 1120px;
+      }
+
+      .jobs-meta {
+        line-height: 1.45;
       }
     }
   </style>
@@ -494,7 +575,7 @@
         <div class="jobs-head">
           <div>
             <h2 class="jobs-title">Recent Jobs</h2>
-            <div class="jobs-meta" id="jobs-meta">Waiting for first refresh...</div>
+            <div class="jobs-meta" id="jobs-meta">Waiting for first refresh. Swipe sideways on narrow screens to view all columns.</div>
           </div>
         </div>
 
@@ -502,27 +583,27 @@
           <table>
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>State</th>
-                <th>Final Parent</th>
-                <th>Stage</th>
-                <th>Hash</th>
-                <th>Last Error</th>
-                <th>Actions</th>
+                <th class="cell-id">ID</th>
+                <th class="cell-name">Name</th>
+                <th class="cell-state">State</th>
+                <th class="cell-final-parent">Final Parent</th>
+                <th class="cell-stage">Stage</th>
+                <th class="cell-hash">Hash</th>
+                <th class="cell-last-error">Last Error</th>
+                <th class="cell-actions">Actions</th>
               </tr>
             </thead>
             <tbody id="jobs-tbody">
               {% for job in jobs %}
               <tr>
-                <td class="mono">{{ job.id }}</td>
-                <td>{{ job.torrent_name or '-' }}</td>
-                <td><span class="state-pill" data-state="{{ job.state }}">{{ job.state }}</span></td>
-                <td class="mono">{{ job.final_parent }}</td>
-                <td>{{ job.staging_actual or job.staging_preference }}</td>
-                <td class="mono">{{ job.qbt_hash or '-' }}</td>
-                <td>{{ job.last_error or '-' }}</td>
-                <td>
+                <td class="mono cell-id">{{ job.id }}</td>
+                <td class="cell-name">{{ job.torrent_name or '-' }}</td>
+                <td class="cell-state"><span class="state-pill" data-state="{{ job.state }}">{{ job.state }}</span></td>
+                <td class="mono cell-final-parent">{{ job.final_parent }}</td>
+                <td class="cell-stage">{{ job.staging_actual or job.staging_preference }}</td>
+                <td class="mono cell-hash">{{ job.qbt_hash or '-' }}</td>
+                <td class="cell-last-error">{{ job.last_error or '-' }}</td>
+                <td class="cell-actions">
                   <div class="job-actions">
                     {% if job.state == "error" %}
                     <button class="job-action" type="button" onclick="retryJob('{{ job.id }}')">Retry</button>
@@ -591,6 +672,7 @@
 
     function createStateCell(state) {
       const td = document.createElement('td');
+      td.className = 'cell-state';
       const pill = document.createElement('span');
       pill.className = 'state-pill';
       pill.dataset.state = state || '';
@@ -615,15 +697,16 @@
 
       jobs.forEach((job) => {
         const row = document.createElement('tr');
-        row.appendChild(createCell(job.id, 'mono'));
-        row.appendChild(createCell(job.torrent_name));
+        row.appendChild(createCell(job.id, 'mono cell-id'));
+        row.appendChild(createCell(job.torrent_name, 'cell-name'));
         row.appendChild(createStateCell(job.state));
-        row.appendChild(createCell(job.final_parent, 'mono'));
-        row.appendChild(createCell(job.staging_actual || job.staging_preference));
-        row.appendChild(createCell(job.qbt_hash, 'mono'));
-        row.appendChild(createCell(job.last_error));
+        row.appendChild(createCell(job.final_parent, 'mono cell-final-parent'));
+        row.appendChild(createCell(job.staging_actual || job.staging_preference, 'cell-stage'));
+        row.appendChild(createCell(job.qbt_hash, 'mono cell-hash'));
+        row.appendChild(createCell(job.last_error, 'cell-last-error'));
 
         const actionsCell = document.createElement('td');
+        actionsCell.className = 'cell-actions';
         const actionsWrap = document.createElement('div');
         actionsWrap.className = 'job-actions';
 
@@ -698,7 +781,7 @@
         if (!jobsRes.ok) throw new Error(`HTTP ${jobsRes.status}`);
         const jobs = await jobsRes.json();
         renderJobs(jobs);
-        jobsMeta.textContent = `Auto-refreshing every 5s. Last updated ${new Date().toLocaleTimeString()}.`;
+        jobsMeta.textContent = `Auto-refreshing every 5s. Last updated ${new Date().toLocaleTimeString()}. Swipe sideways on narrow screens to view all columns.`;
       } catch (error) {
         jobsMeta.textContent = 'Job refresh failed. The existing table is still shown.';
       } finally {
