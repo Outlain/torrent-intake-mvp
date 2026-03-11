@@ -79,6 +79,8 @@ def create_job(payload: JobCreate, db: Session = Depends(get_db)):
             staging_preference=payload.staging_preference,
         )
         return job
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

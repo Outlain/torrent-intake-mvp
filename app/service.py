@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from .config import get_settings
 from .models import Job
-from .qbt import QbtService
+from .qbt import QbtService, TorrentAlreadyExistsError
 from .scanner import ScannerService
 from .telegram import TelegramService
 
@@ -24,6 +24,17 @@ class JobService:
 
     def submit_job(self, db: Session, *, magnet_uri: str, final_parent: str, final_category: str | None,
                    staging_preference: str) -> Job:
+        existing_torrent = self.qbt.find_existing_from_magnet(magnet_uri)
+        if existing_torrent is not None:
+            raise ValueError(
+                self._duplicate_torrent_message(
+                    db,
+                    torrent_hash=getattr(existing_torrent, "hash", None),
+                    torrent_name=getattr(existing_torrent, "name", None),
+                    exclude_job_id=None,
+                )
+            )
+
         job_id = str(uuid4())
         unique_tag = f"ti_job_{uuid4().hex[:12]}"
         staging_root = self._root_for_preference(staging_preference)
@@ -54,6 +65,17 @@ class JobService:
                 category=self.settings.intake_category,
             )
             self._resolve_hash_for_job(db, job)
+        except TorrentAlreadyExistsError as exc:
+            error_text = self._duplicate_torrent_message(
+                db,
+                torrent_hash=exc.torrent_hash,
+                torrent_name=exc.torrent_name,
+                exclude_job_id=job.id,
+            )
+            self.logger.warning("Rejected duplicate intake submit for job %s: %s", job.id, error_text)
+            db.delete(job)
+            db.commit()
+            raise ValueError(error_text) from exc
         except Exception as exc:
             error_text = str(exc).strip() or repr(exc)
             self.logger.exception("Failed to submit job %s to qBittorrent", job.id)
@@ -95,6 +117,37 @@ class JobService:
             db.commit()
             db.refresh(job)
             return job
+        except TorrentAlreadyExistsError as exc:
+            message = self._duplicate_torrent_message(
+                db,
+                torrent_hash=exc.torrent_hash,
+                torrent_name=exc.torrent_name,
+                exclude_job_id=job.id,
+            )
+            existing_torrent = self.qbt.get_torrent(exc.torrent_hash) if exc.torrent_hash else None
+            tracked_job = self._find_job_by_hash(db, torrent_hash=exc.torrent_hash, exclude_job_id=job.id)
+
+            if existing_torrent is not None and tracked_job is None:
+                job.qbt_hash = getattr(existing_torrent, "hash", None) or exc.torrent_hash
+                self._sync_job_from_torrent(job, existing_torrent)
+                job.state = self._state_for_retry(job, existing_torrent)
+                job.is_terminal = False
+                db.add(job)
+                db.commit()
+                db.refresh(job)
+                self.logger.info(
+                    "Attached retry job %s to existing qBittorrent torrent %s",
+                    job.id,
+                    job.qbt_hash,
+                )
+                return job
+
+            self.logger.warning("Retry rejected for stale duplicate job %s: %s", job.id, message)
+            self._mark(job, "error", error=message)
+            db.add(job)
+            db.commit()
+            db.refresh(job)
+            raise ValueError(message) from exc
         except Exception as exc:
             error_text = str(exc).strip() or repr(exc)
             self.logger.exception("Failed to retry job %s", job.id)
@@ -156,6 +209,39 @@ class JobService:
 
     def _root_for_preference(self, preference: str) -> str:
         return self.settings.local_staging_root if preference == "local" else self.settings.nas_staging_root
+
+    def _find_job_by_hash(self, db: Session, *, torrent_hash: str | None, exclude_job_id: str | None) -> Job | None:
+        if not torrent_hash:
+            return None
+        jobs = list(db.scalars(select(Job).where(Job.qbt_hash == torrent_hash).order_by(Job.created_at.desc())))
+        filtered = [job for job in jobs if job.id != exclude_job_id]
+        if not filtered:
+            return None
+        for job in filtered:
+            if not job.is_terminal:
+                return job
+        return filtered[0]
+
+    def _duplicate_torrent_message(
+        self,
+        db: Session,
+        *,
+        torrent_hash: str | None,
+        torrent_name: str | None,
+        exclude_job_id: str | None,
+    ) -> str:
+        name_part = f"'{torrent_name}'" if torrent_name else "this torrent"
+        hash_part = f" ({torrent_hash})" if torrent_hash else ""
+        tracked_job = self._find_job_by_hash(db, torrent_hash=torrent_hash, exclude_job_id=exclude_job_id)
+        if tracked_job is not None:
+            return (
+                f"{name_part}{hash_part} is already present in qBittorrent and is already tracked by intake job "
+                f"{tracked_job.id}. Delete the stale intake row instead of retrying or re-adding it."
+            )
+        return (
+            f"{name_part}{hash_part} is already present in qBittorrent. "
+            "qBittorrent rejected the add because that torrent hash already exists."
+        )
 
     def _empty_bulk_result(self) -> dict[str, object]:
         return {

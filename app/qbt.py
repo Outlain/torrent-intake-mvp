@@ -1,9 +1,27 @@
 from __future__ import annotations
+import base64
+import binascii
+import re
 import qbittorrentapi
 from .config import get_settings
 
 
+class TorrentAlreadyExistsError(RuntimeError):
+    def __init__(self, *, torrent_hash: str | None, torrent_name: str | None, save_path: str | None) -> None:
+        self.torrent_hash = torrent_hash
+        self.torrent_name = torrent_name
+        self.save_path = save_path
+        details = torrent_name or "unknown torrent"
+        if torrent_hash:
+            details = f"{details} ({torrent_hash})"
+        if save_path:
+            details = f"{details} at {save_path}"
+        super().__init__(f"torrent already exists in qBittorrent: {details}")
+
+
 class QbtService:
+    _BTIH_PATTERN = re.compile(r"(^|[?&])xt=urn:btih:([A-Za-z0-9]{32}|[A-Fa-f0-9]{40})($|&)")
+
     def __init__(self) -> None:
         self.settings = get_settings()
 
@@ -33,6 +51,14 @@ class QbtService:
 
     def add_torrent(self, magnet_uri: str, save_path: str, tags: list[str], category: str) -> None:
         client = self.client()
+        infohash = self._extract_btih_hash(magnet_uri)
+        existing = self._get_torrent_with_client(client, infohash) if infohash else None
+        if existing is not None:
+            raise TorrentAlreadyExistsError(
+                torrent_hash=getattr(existing, "hash", None),
+                torrent_name=getattr(existing, "name", None),
+                save_path=getattr(existing, "save_path", None),
+            )
         try:
             result = client.torrents_add(
                 urls=magnet_uri,
@@ -42,12 +68,31 @@ class QbtService:
                 is_paused=False,
             )
             if isinstance(result, str) and result.strip().lower() != "ok.":
-                raise RuntimeError(f"unexpected qBittorrent add result: {result}")
+                existing = self._get_torrent_with_client(client, infohash) if infohash else None
+                if existing is not None:
+                    raise TorrentAlreadyExistsError(
+                        torrent_hash=getattr(existing, "hash", None),
+                        torrent_name=getattr(existing, "name", None),
+                        save_path=getattr(existing, "save_path", None),
+                    )
+                raise RuntimeError(
+                    f"unexpected qBittorrent add result: {result!r} "
+                    "(generic qB add failure; often duplicate torrent, malformed magnet, or rejected save path/category)"
+                )
+        except TorrentAlreadyExistsError:
+            raise
         except Exception as exc:
             raise RuntimeError(
                 "qBittorrent rejected torrent add request "
                 f"(save_path={save_path}, category={category}): {self._format_exc(exc)}"
             ) from exc
+
+    def find_existing_from_magnet(self, magnet_uri: str):
+        client = self.client()
+        infohash = self._extract_btih_hash(magnet_uri)
+        if not infohash:
+            return None
+        return self._get_torrent_with_client(client, infohash)
 
     def find_by_unique_tag(self, unique_tag: str):
         client = self.client()
@@ -60,11 +105,7 @@ class QbtService:
         return None
 
     def get_torrent(self, torrent_hash: str):
-        client = self.client()
-        torrents = client.torrents_info(torrent_hashes=torrent_hash)
-        if not torrents:
-            return None
-        return torrents[0]
+        return self._get_torrent_with_client(self.client(), torrent_hash)
 
     def pause(self, torrent_hash: str) -> None:
         self.client().torrents_pause(torrent_hashes=torrent_hash)
@@ -134,3 +175,24 @@ class QbtService:
                 f"failed to create qBittorrent category '{requested}': {self._format_exc(exc)}"
             ) from exc
         return requested
+
+    def _get_torrent_with_client(self, client: qbittorrentapi.Client, torrent_hash: str | None):
+        if not torrent_hash:
+            return None
+        torrents = client.torrents_info(torrent_hashes=torrent_hash)
+        if not torrents:
+            return None
+        return torrents[0]
+
+    def _extract_btih_hash(self, magnet_uri: str) -> str | None:
+        match = self._BTIH_PATTERN.search(magnet_uri)
+        if not match:
+            return None
+        raw_hash = match.group(2).strip()
+        if len(raw_hash) == 40:
+            return raw_hash.lower()
+        try:
+            decoded = base64.b32decode(raw_hash.upper())
+            return decoded.hex().lower()
+        except (binascii.Error, ValueError):
+            return None
