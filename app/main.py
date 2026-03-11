@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .db import Base, engine, get_db
 from .models import Job
-from .schemas import CompletionEventIn, JobCreate, JobOut
+from .schemas import CompletionEventIn, JobBulkResult, JobCreate, JobOut, JobSelectionIn
 from .service import JobService
 from .worker import worker_loop
 
@@ -103,6 +103,11 @@ def retry_job(job_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@app.post("/jobs/bulk-retry", response_model=JobBulkResult)
+def bulk_retry_jobs(payload: JobSelectionIn, db: Session = Depends(get_db)):
+    return service.retry_jobs(db, job_ids=payload.job_ids)
+
+
 @app.get("/qbt/categories")
 def qbt_categories():
     try:
@@ -136,6 +141,21 @@ def delete_job(job_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/jobs/bulk-delete", response_model=JobBulkResult)
+def bulk_delete_jobs(payload: JobSelectionIn, db: Session = Depends(get_db)):
+    return service.delete_jobs(db, job_ids=payload.job_ids)
+
+
+@app.post("/jobs/clear-completed", response_model=JobBulkResult)
+def clear_completed_jobs(db: Session = Depends(get_db)):
+    return service.delete_jobs_by_states(db, states={"done", "infected_deleted"})
+
+
+@app.post("/jobs/clear-failed", response_model=JobBulkResult)
+def clear_failed_jobs(db: Session = Depends(get_db)):
+    return service.delete_jobs_by_states(db, states={"error"})
 
 
 @app.post("/events/qbt-complete")

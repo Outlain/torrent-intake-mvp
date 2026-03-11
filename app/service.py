@@ -112,6 +112,18 @@ class JobService:
         db.delete(job)
         db.commit()
 
+    def retry_jobs(self, db: Session, *, job_ids: list[str]) -> dict[str, object]:
+        return self._bulk_apply(job_ids, lambda selected_id: self.retry_job(db, job_id=selected_id))
+
+    def delete_jobs(self, db: Session, *, job_ids: list[str]) -> dict[str, object]:
+        return self._bulk_apply(job_ids, lambda selected_id: self.delete_job(db, job_id=selected_id))
+
+    def delete_jobs_by_states(self, db: Session, *, states: set[str]) -> dict[str, object]:
+        if not states:
+            return self._empty_bulk_result()
+        jobs = list(db.scalars(select(Job).where(Job.state.in_(tuple(states))).order_by(Job.created_at.desc())))
+        return self.delete_jobs(db, job_ids=[job.id for job in jobs])
+
     def suggest_final_paths(self, prefix: str | None) -> list[str]:
         roots = [Path(path).resolve() for path in self.settings.allowed_final_parent_prefixes]
         default_root = Path(self.settings.final_parent_prefix.rstrip("/")).resolve()
@@ -144,6 +156,39 @@ class JobService:
 
     def _root_for_preference(self, preference: str) -> str:
         return self.settings.local_staging_root if preference == "local" else self.settings.nas_staging_root
+
+    def _empty_bulk_result(self) -> dict[str, object]:
+        return {
+            "requested": 0,
+            "processed": 0,
+            "skipped": 0,
+            "failed": 0,
+            "processed_ids": [],
+            "skipped_ids": [],
+            "failed_ids": [],
+            "errors": {},
+        }
+
+    def _bulk_apply(self, job_ids: list[str], operation) -> dict[str, object]:
+        unique_ids = list(dict.fromkeys(job_ids))
+        result = self._empty_bulk_result()
+        result["requested"] = len(unique_ids)
+
+        for job_id in unique_ids:
+            try:
+                operation(job_id)
+                result["processed_ids"].append(job_id)
+            except (LookupError, ValueError) as exc:
+                result["skipped_ids"].append(job_id)
+                result["errors"][job_id] = str(exc)
+            except RuntimeError as exc:
+                result["failed_ids"].append(job_id)
+                result["errors"][job_id] = str(exc)
+
+        result["processed"] = len(result["processed_ids"])
+        result["skipped"] = len(result["skipped_ids"])
+        result["failed"] = len(result["failed_ids"])
+        return result
 
     def _mark(self, job: Job, state: str, *, error: str | None = None) -> None:
         job.state = state

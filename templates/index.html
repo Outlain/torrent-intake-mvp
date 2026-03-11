@@ -277,6 +277,94 @@
       font-size: 0.88rem;
     }
 
+    .jobs-toolbar {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 14px;
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .jobs-toolbar-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .jobs-toolbar-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .bulk-toggle,
+    .toolbar-field {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--ink);
+      font-size: 0.9rem;
+    }
+
+    .bulk-toggle input,
+    .job-checkbox {
+      appearance: auto;
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      box-shadow: none;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .toolbar-field span {
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .toolbar-select {
+      min-width: 150px;
+      width: auto;
+      padding: 9px 38px 9px 12px;
+      border-radius: 999px;
+    }
+
+    .toolbar-button {
+      padding: 10px 14px;
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+
+    .toolbar-button.danger-soft {
+      background: rgba(255, 114, 114, 0.1);
+      color: var(--danger);
+    }
+
+    .jobs-toolbar-status {
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+
+    .jobs-toolbar-status.error {
+      color: var(--danger);
+    }
+
     .table-wrap {
       display: block;
       overflow-x: auto;
@@ -354,6 +442,14 @@
       word-break: break-word;
     }
 
+    .cell-select {
+      width: 56px;
+      min-width: 56px;
+      text-align: center;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
     .cell-id {
       min-width: 170px;
       max-width: 220px;
@@ -387,12 +483,6 @@
     .cell-last-error {
       min-width: 320px;
       max-width: 460px;
-    }
-
-    .cell-actions {
-      min-width: 150px;
-      white-space: nowrap;
-      vertical-align: middle;
     }
 
     .state-pill {
@@ -435,24 +525,8 @@
       color: var(--danger);
     }
 
-    .job-actions {
-      display: inline-flex;
-      flex-wrap: nowrap;
-      gap: 8px;
-    }
-
-    .job-action {
-      padding: 8px 12px;
-      font-size: 0.84rem;
-      font-weight: 700;
-      background: rgba(255, 255, 255, 0.08);
-      color: var(--ink);
-      white-space: nowrap;
-    }
-
-    .job-action.danger {
-      background: rgba(153, 47, 47, 0.12);
-      color: var(--danger);
+    tbody tr.row-selected {
+      background: rgba(222, 125, 54, 0.09);
     }
 
     .empty-row td {
@@ -495,12 +569,51 @@
       .jobs-meta {
         line-height: 1.45;
       }
+
+      .jobs-toolbar-row,
+      .jobs-toolbar-group {
+        align-items: stretch;
+      }
+
+      .bulk-toggle,
+      .toolbar-field {
+        width: 100%;
+        justify-content: space-between;
+      }
+
+      .toolbar-select {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      .toolbar-button {
+        width: 100%;
+      }
     }
 
     @media (min-width: 1520px) {
       .top-layout {
-        grid-template-columns: minmax(360px, 0.78fr) minmax(780px, 1.22fr);
-        align-items: start;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: stretch;
+      }
+
+      .top-layout .hero-copy {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .top-layout .hero-copy > .eyebrow,
+      .top-layout .hero-copy > h1,
+      .top-layout .hero-copy > .lede,
+      .top-layout .hero-copy > .meta-grid {
+        width: min(100%, 720px);
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .top-layout .hero-copy > .lede {
+        max-width: none;
       }
 
       .top-layout .meta-grid {
@@ -598,10 +711,37 @@
           </div>
         </div>
 
+        <div class="jobs-toolbar">
+          <div class="jobs-toolbar-row">
+            <div class="jobs-toolbar-group">
+              <label class="bulk-toggle">
+                <input id="select-all-jobs" type="checkbox">
+                <span>Select visible jobs</span>
+              </label>
+              <label class="toolbar-field">
+                <span>Sort</span>
+                <select id="jobs-sort-select" class="toolbar-select">
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                </select>
+              </label>
+            </div>
+            <div class="jobs-toolbar-group">
+              <button id="retry-selected-button" class="button-secondary toolbar-button" type="button">Retry Selected</button>
+              <button id="retry-failed-button" class="button-secondary toolbar-button" type="button">Retry Failed</button>
+              <button id="delete-selected-button" class="button-secondary toolbar-button danger-soft" type="button">Delete Selected</button>
+              <button id="clear-completed-button" class="button-secondary toolbar-button" type="button">Clear Completed</button>
+              <button id="clear-failed-button" class="button-secondary toolbar-button danger-soft" type="button">Clear Failed</button>
+            </div>
+          </div>
+          <div class="jobs-toolbar-status" id="jobs-toolbar-status">No jobs selected.</div>
+        </div>
+
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
+                <th class="cell-select">Sel</th>
                 <th class="cell-id">ID</th>
                 <th class="cell-name">Name</th>
                 <th class="cell-state">State</th>
@@ -609,12 +749,12 @@
                 <th class="cell-stage">Stage</th>
                 <th class="cell-hash">Hash</th>
                 <th class="cell-last-error">Last Error</th>
-                <th class="cell-actions">Actions</th>
               </tr>
             </thead>
             <tbody id="jobs-tbody">
               {% for job in jobs %}
               <tr>
+                <td class="cell-select"><input class="job-checkbox" type="checkbox" data-job-id="{{ job.id }}"></td>
                 <td class="mono cell-id">{{ job.id }}</td>
                 <td class="cell-name">{{ job.torrent_name or '-' }}</td>
                 <td class="cell-state"><span class="state-pill" data-state="{{ job.state }}">{{ job.state }}</span></td>
@@ -622,16 +762,6 @@
                 <td class="cell-stage">{{ job.staging_actual or job.staging_preference }}</td>
                 <td class="mono cell-hash">{{ job.qbt_hash or '-' }}</td>
                 <td class="cell-last-error">{{ job.last_error or '-' }}</td>
-                <td class="cell-actions">
-                  <div class="job-actions">
-                    {% if job.state == "error" %}
-                    <button class="job-action" type="button" onclick="retryJob('{{ job.id }}')">Retry</button>
-                    {% endif %}
-                    {% if job.is_terminal %}
-                    <button class="job-action danger" type="button" onclick="deleteJob('{{ job.id }}')">Delete</button>
-                    {% endif %}
-                  </div>
-                </td>
               </tr>
               {% endfor %}
             </tbody>
@@ -647,10 +777,22 @@
     const submitButton = document.getElementById('submit-button');
     const refreshJobsButton = document.getElementById('refresh-jobs-button');
     const jobsMeta = document.getElementById('jobs-meta');
+    const jobsToolbarStatus = document.getElementById('jobs-toolbar-status');
     const jobsTbody = document.getElementById('jobs-tbody');
+    const selectAllJobsCheckbox = document.getElementById('select-all-jobs');
+    const jobsSortSelect = document.getElementById('jobs-sort-select');
+    const retrySelectedButton = document.getElementById('retry-selected-button');
+    const retryFailedButton = document.getElementById('retry-failed-button');
+    const deleteSelectedButton = document.getElementById('delete-selected-button');
+    const clearCompletedButton = document.getElementById('clear-completed-button');
+    const clearFailedButton = document.getElementById('clear-failed-button');
     const defaultFinalParentPrefix = finalParentInput.dataset.defaultPrefix || '/downloads';
 
     let knownFinalPaths = [];
+    let latestJobs = [];
+    let selectedJobIds = new Set();
+    let jobsSortOrder = 'newest';
+    let jobsToolbarFlashTimer = null;
     let finalPathTimer = null;
     let jobsRefreshTimer = null;
     let jobsRequestInFlight = false;
@@ -666,6 +808,20 @@
     function setFormStatus(message, isError = false) {
       formStatus.textContent = message || '';
       formStatus.classList.toggle('error', Boolean(isError));
+    }
+
+    function setJobsToolbarStatus(message, isError = false) {
+      jobsToolbarStatus.textContent = message || '';
+      jobsToolbarStatus.classList.toggle('error', Boolean(isError));
+    }
+
+    function flashJobsToolbarStatus(message, isError = false) {
+      if (jobsToolbarFlashTimer) clearTimeout(jobsToolbarFlashTimer);
+      setJobsToolbarStatus(message, isError);
+      jobsToolbarFlashTimer = setTimeout(() => {
+        jobsToolbarFlashTimer = null;
+        updateJobsToolbarState();
+      }, 3500);
     }
 
     function replaceOptions(listId, values) {
@@ -689,6 +845,19 @@
       return td;
     }
 
+    function createCheckboxCell(jobId, checked) {
+      const td = document.createElement('td');
+      td.className = 'cell-select';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'job-checkbox';
+      checkbox.dataset.jobId = jobId;
+      checkbox.checked = checked;
+      td.appendChild(checkbox);
+      return td;
+    }
+
     function createStateCell(state) {
       const td = document.createElement('td');
       td.className = 'cell-state';
@@ -700,10 +869,64 @@
       return td;
     }
 
+    function compareJobsByCreatedAt(left, right) {
+      const leftMs = new Date(left.created_at || 0).getTime();
+      const rightMs = new Date(right.created_at || 0).getTime();
+      return jobsSortOrder === 'oldest' ? leftMs - rightMs : rightMs - leftMs;
+    }
+
+    function getDisplayedJobs() {
+      return [...latestJobs].sort(compareJobsByCreatedAt);
+    }
+
+    function pruneSelection() {
+      const visibleIds = new Set(latestJobs.map((job) => job.id));
+      selectedJobIds = new Set([...selectedJobIds].filter((jobId) => visibleIds.has(jobId)));
+    }
+
+    function countSelectedEligibleJobs(jobs) {
+      const retryEligible = jobs.filter((job) => selectedJobIds.has(job.id) && job.state === 'error').length;
+      const deleteEligible = jobs.filter((job) => selectedJobIds.has(job.id) && job.is_terminal).length;
+      const failedJobs = jobs.filter((job) => job.state === 'error').length;
+      const completedJobs = jobs.filter((job) => ['done', 'infected_deleted'].includes(job.state)).length;
+      return { retryEligible, deleteEligible, failedJobs, completedJobs };
+    }
+
+    function updateJobsToolbarState() {
+      const displayedJobs = getDisplayedJobs();
+      const displayedIds = displayedJobs.map((job) => job.id);
+      const selectedVisibleCount = displayedIds.filter((jobId) => selectedJobIds.has(jobId)).length;
+      const allVisibleSelected = displayedIds.length > 0 && selectedVisibleCount === displayedIds.length;
+
+      selectAllJobsCheckbox.checked = allVisibleSelected;
+      selectAllJobsCheckbox.indeterminate = selectedVisibleCount > 0 && !allVisibleSelected;
+
+      const { retryEligible, deleteEligible, failedJobs, completedJobs } = countSelectedEligibleJobs(displayedJobs);
+      retrySelectedButton.disabled = retryEligible === 0;
+      deleteSelectedButton.disabled = deleteEligible === 0;
+      retryFailedButton.disabled = failedJobs === 0;
+      clearCompletedButton.disabled = completedJobs === 0;
+      clearFailedButton.disabled = failedJobs === 0;
+
+      if (selectedVisibleCount === 0) {
+        if (!jobsToolbarFlashTimer) {
+          setJobsToolbarStatus(`${displayedJobs.length} jobs shown. Use the checkboxes to batch retry or delete.`);
+        }
+        return;
+      }
+
+      if (!jobsToolbarFlashTimer) {
+        setJobsToolbarStatus(
+          `${selectedVisibleCount} selected. Retry eligible: ${retryEligible}. Delete eligible: ${deleteEligible}.`
+        );
+      }
+    }
+
     function renderJobs(jobs) {
       jobsTbody.innerHTML = '';
+      const sortedJobs = [...jobs].sort(compareJobsByCreatedAt);
 
-      if (!Array.isArray(jobs) || jobs.length === 0) {
+      if (!Array.isArray(sortedJobs) || sortedJobs.length === 0) {
         const row = document.createElement('tr');
         row.className = 'empty-row';
         const cell = document.createElement('td');
@@ -711,11 +934,15 @@
         cell.textContent = 'No jobs yet.';
         row.appendChild(cell);
         jobsTbody.appendChild(row);
+        updateJobsToolbarState();
         return;
       }
 
-      jobs.forEach((job) => {
+      sortedJobs.forEach((job) => {
         const row = document.createElement('tr');
+        const isSelected = selectedJobIds.has(job.id);
+        if (isSelected) row.className = 'row-selected';
+        row.appendChild(createCheckboxCell(job.id, isSelected));
         row.appendChild(createCell(job.id, 'mono cell-id'));
         row.appendChild(createCell(job.torrent_name, 'cell-name'));
         row.appendChild(createStateCell(job.state));
@@ -723,34 +950,10 @@
         row.appendChild(createCell(job.staging_actual || job.staging_preference, 'cell-stage'));
         row.appendChild(createCell(job.qbt_hash, 'mono cell-hash'));
         row.appendChild(createCell(job.last_error, 'cell-last-error'));
-
-        const actionsCell = document.createElement('td');
-        actionsCell.className = 'cell-actions';
-        const actionsWrap = document.createElement('div');
-        actionsWrap.className = 'job-actions';
-
-        if (job.state === 'error') {
-          const retryButton = document.createElement('button');
-          retryButton.type = 'button';
-          retryButton.className = 'job-action';
-          retryButton.textContent = 'Retry';
-          retryButton.addEventListener('click', () => retryJob(job.id));
-          actionsWrap.appendChild(retryButton);
-        }
-
-        if (job.is_terminal) {
-          const deleteButton = document.createElement('button');
-          deleteButton.type = 'button';
-          deleteButton.className = 'job-action danger';
-          deleteButton.textContent = 'Delete';
-          deleteButton.addEventListener('click', () => deleteJob(job.id));
-          actionsWrap.appendChild(deleteButton);
-        }
-
-        actionsCell.appendChild(actionsWrap);
-        row.appendChild(actionsCell);
         jobsTbody.appendChild(row);
       });
+
+      updateJobsToolbarState();
     }
 
     async function loadCategories() {
@@ -798,8 +1001,9 @@
       try {
         const jobsRes = await fetch('/jobs');
         if (!jobsRes.ok) throw new Error(`HTTP ${jobsRes.status}`);
-        const jobs = await jobsRes.json();
-        renderJobs(jobs);
+        latestJobs = await jobsRes.json();
+        pruneSelection();
+        renderJobs(latestJobs);
         jobsMeta.textContent = `Auto-refreshing every 5s. Last updated ${new Date().toLocaleTimeString()}. Swipe sideways on narrow screens to view all columns.`;
       } catch (error) {
         jobsMeta.textContent = 'Job refresh failed. The existing table is still shown.';
@@ -808,23 +1012,43 @@
       }
     }
 
-    async function retryJob(jobId) {
-      const res = await fetch(`/jobs/${jobId}/retry`, { method: 'POST' });
+    async function postJson(url, payload = {}) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
       if (!res.ok) {
-        alert(await res.text());
-        return;
+        throw new Error(await res.text());
       }
-      await loadJobs();
+      return res.json();
     }
 
-    async function deleteJob(jobId) {
-      if (!confirm('Delete this terminal job from the intake list?')) return;
-      const res = await fetch(`/jobs/${jobId}`, { method: 'DELETE' });
-      if (!res.ok) {
-        alert(await res.text());
-        return;
+    function dropSelection(jobIds) {
+      jobIds.forEach((jobId) => selectedJobIds.delete(jobId));
+    }
+
+    function formatBulkResult(actionLabel, result) {
+      const parts = [`${actionLabel}: ${result.processed || 0} processed`];
+      if (result.skipped) parts.push(`${result.skipped} skipped`);
+      if (result.failed) parts.push(`${result.failed} failed`);
+      return parts.join(', ') + '.';
+    }
+
+    async function runBulkAction({ url, payload = {}, confirmMessage = '', label }) {
+      if (confirmMessage && !confirm(confirmMessage)) return;
+      try {
+        const result = await postJson(url, payload);
+        dropSelection([...(result.processed_ids || []), ...(result.failed_ids || [])]);
+        await loadJobs({ silent: true });
+        flashJobsToolbarStatus(formatBulkResult(label, result), Boolean(result.failed));
+      } catch (error) {
+        flashJobsToolbarStatus(String(error), true);
       }
-      await loadJobs();
+    }
+
+    function getSelectedJobIds() {
+      return [...selectedJobIds];
     }
 
     document.getElementById('job-form').addEventListener('submit', async (event) => {
@@ -862,6 +1086,73 @@
     });
     finalParentInput.addEventListener('focus', loadFinalPathSuggestions);
     refreshJobsButton.addEventListener('click', () => loadJobs());
+    jobsSortSelect.addEventListener('change', () => {
+      jobsSortOrder = jobsSortSelect.value;
+      renderJobs(latestJobs);
+    });
+    selectAllJobsCheckbox.addEventListener('change', () => {
+      const displayedJobs = getDisplayedJobs();
+      if (selectAllJobsCheckbox.checked) {
+        displayedJobs.forEach((job) => selectedJobIds.add(job.id));
+      } else {
+        displayedJobs.forEach((job) => selectedJobIds.delete(job.id));
+      }
+      renderJobs(latestJobs);
+    });
+    jobsTbody.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || !target.classList.contains('job-checkbox')) return;
+      const { jobId } = target.dataset;
+      if (!jobId) return;
+      if (target.checked) {
+        selectedJobIds.add(jobId);
+      } else {
+        selectedJobIds.delete(jobId);
+      }
+      renderJobs(latestJobs);
+    });
+    retrySelectedButton.addEventListener('click', () => {
+      const jobIds = getSelectedJobIds();
+      if (jobIds.length === 0) return;
+      runBulkAction({
+        url: '/jobs/bulk-retry',
+        payload: { job_ids: jobIds },
+        label: 'Retry selected',
+      });
+    });
+    retryFailedButton.addEventListener('click', () => {
+      const failedIds = latestJobs.filter((job) => job.state === 'error').map((job) => job.id);
+      if (failedIds.length === 0) return;
+      runBulkAction({
+        url: '/jobs/bulk-retry',
+        payload: { job_ids: failedIds },
+        label: 'Retry failed',
+      });
+    });
+    deleteSelectedButton.addEventListener('click', () => {
+      const jobIds = getSelectedJobIds();
+      if (jobIds.length === 0) return;
+      runBulkAction({
+        url: '/jobs/bulk-delete',
+        payload: { job_ids: jobIds },
+        confirmMessage: 'Delete selected terminal jobs from the intake history? Non-terminal rows will be skipped.',
+        label: 'Delete selected',
+      });
+    });
+    clearCompletedButton.addEventListener('click', () => {
+      runBulkAction({
+        url: '/jobs/clear-completed',
+        confirmMessage: 'Clear completed jobs from the intake history?',
+        label: 'Clear completed',
+      });
+    });
+    clearFailedButton.addEventListener('click', () => {
+      runBulkAction({
+        url: '/jobs/clear-failed',
+        confirmMessage: 'Clear failed jobs from the intake history?',
+        label: 'Clear failed',
+      });
+    });
 
     Promise.all([loadCategories(), loadKnownFinalPaths()]).then(() => {
       loadFinalPathSuggestions();

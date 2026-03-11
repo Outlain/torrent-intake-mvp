@@ -62,6 +62,21 @@ class JobOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class JobSelectionIn(BaseModel):
+    job_ids: list[str] = Field(default_factory=list)
+
+
+class JobBulkResult(BaseModel):
+    requested: int
+    processed: int
+    skipped: int
+    failed: int
+    processed_ids: list[str] = Field(default_factory=list)
+    skipped_ids: list[str] = Field(default_factory=list)
+    failed_ids: list[str] = Field(default_factory=list)
+    errors: dict[str, str] = Field(default_factory=dict)
+
+
 class CompletionEventIn(BaseModel):
     qbt_hash: str | None = None
     qbt_hash_v2: str | None = None
