@@ -99,8 +99,8 @@ class JobService:
         self._prepare_job_for_retry(job)
 
         try:
-            torrent = self.qbt.get_torrent(job.qbt_hash) if job.qbt_hash else None
-            if job.qbt_hash and torrent is None:
+            torrent = self._find_live_torrent_for_job(job)
+            if torrent is None and job.qbt_hash:
                 job.qbt_hash = None
 
             if not job.qbt_hash:
@@ -114,6 +114,7 @@ class JobService:
                 self._evaluate_staging_now(db, job)
                 return job
 
+            self._ensure_job_can_track_torrent(db, job, torrent)
             self._sync_job_from_torrent(job, torrent)
             self._apply_local_staging_policy(db, job, torrent)
             if job.state != "waiting_for_local_space":
@@ -202,7 +203,7 @@ class JobService:
         free_bytes, safe_free_bytes, reserved_before_current, current_remaining_bytes = self._local_capacity_snapshot(
             db,
             job,
-            self.qbt.get_torrent(job.qbt_hash),
+            self._find_live_torrent_for_job(job),
         )
         try:
             self._move_local_job_to_nas(
@@ -352,6 +353,19 @@ class JobService:
             "qBittorrent rejected the add because that torrent hash already exists."
         )
 
+    def _ensure_job_can_track_torrent(self, db: Session, job: Job, torrent) -> None:
+        torrent_hash = getattr(torrent, "hash", None)
+        tracked_job = self._find_job_by_hash(db, torrent_hash=torrent_hash, exclude_job_id=job.id)
+        if tracked_job is not None and not tracked_job.is_terminal:
+            raise ValueError(
+                self._duplicate_torrent_message(
+                    db,
+                    torrent_hash=torrent_hash,
+                    torrent_name=getattr(torrent, "name", None),
+                    exclude_job_id=job.id,
+                )
+            )
+
     def _empty_bulk_result(self) -> dict[str, object]:
         return {
             "requested": 0,
@@ -449,28 +463,69 @@ class JobService:
         db.commit()
         db.refresh(job)
 
+    def _find_live_torrent_for_job(self, job: Job):
+        current_hash = job.qbt_hash
+        torrent = self.qbt.get_torrent(current_hash) if current_hash else None
+        if torrent is not None:
+            return torrent
+
+        if job.unique_tag:
+            torrent = self.qbt.find_by_unique_tag(job.unique_tag)
+            if torrent is not None:
+                self._rebind_job_hash(job, torrent, source="unique_tag")
+                return torrent
+
+        torrent = self.qbt.find_existing_from_magnet(job.magnet_uri)
+        if torrent is not None:
+            self._rebind_job_hash(job, torrent, source="magnet_uri")
+            return torrent
+
+        return None
+
+    def _rebind_job_hash(self, job: Job, torrent, *, source: str) -> None:
+        old_hash = job.qbt_hash
+        new_hash = getattr(torrent, "hash", None)
+        if new_hash and new_hash != old_hash:
+            self.logger.warning(
+                "Recovered qB tracking for job %s via %s old_hash=%s new_hash=%s unique_tag=%s",
+                job.id,
+                source,
+                old_hash or "-",
+                new_hash,
+                job.unique_tag,
+            )
+            job.qbt_hash = new_hash
+        self._sync_job_from_torrent(job, torrent)
+
     def ingest_completion_event(self, db: Session, *, qbt_hash: str | None, qbt_hash_v2: str | None,
                                 unique_tag: str | None, tags: str | None, torrent_name: str | None,
                                 content_path: str | None, root_path: str | None,
                                 save_path: str | None, size_bytes: int | None) -> Job | None:
         unique_tag = unique_tag or self._extract_unique_tag(tags)
-        stmt = None
+        job = None
         if qbt_hash:
-            stmt = select(Job).where(Job.qbt_hash == qbt_hash)
-        elif unique_tag:
-            stmt = select(Job).where(Job.unique_tag == unique_tag)
-        else:
+            job = db.scalar(select(Job).where(Job.qbt_hash == qbt_hash))
+        if not job and unique_tag:
+            job = db.scalar(select(Job).where(Job.unique_tag == unique_tag))
+        if not job:
             self.logger.warning(
-                "Completion event ignored: no qbt_hash/unique_tag (qbt_hash_v2=%s, tags=%s, torrent_name=%s)",
+                "Completion event ignored: no matching job found qbt_hash=%s qbt_hash_v2=%s unique_tag=%s tags=%s torrent_name=%s",
+                qbt_hash,
                 qbt_hash_v2,
+                unique_tag,
                 tags,
                 torrent_name,
             )
             return None
-
-        job = db.scalar(stmt)
-        if not job:
-            return None
+        if qbt_hash and job.qbt_hash != qbt_hash:
+            self.logger.warning(
+                "Rebinding job %s from completion event old_hash=%s new_hash=%s unique_tag=%s",
+                job.id,
+                job.qbt_hash or "-",
+                qbt_hash,
+                unique_tag or job.unique_tag,
+            )
+            job.qbt_hash = qbt_hash
 
         # Backdate by grace seconds so an event-triggered processing pass can act immediately.
         job.completion_event_received_at = datetime.utcnow() - timedelta(seconds=self.settings.completion_grace_seconds)
@@ -543,14 +598,21 @@ class JobService:
             self._resolve_hash_for_job(db, job)
             return
 
-        torrent = self.qbt.get_torrent(job.qbt_hash)
+        torrent = self._find_live_torrent_for_job(job)
         if torrent is None:
             if job.state in {"infected_deleted", "done"}:
                 job.is_terminal = True
                 db.add(job)
                 db.commit()
                 return
+            self.logger.warning(
+                "Unable to find live qB torrent for job %s stored_hash=%s unique_tag=%s",
+                job.id,
+                job.qbt_hash,
+                job.unique_tag,
+            )
             raise RuntimeError(f"Torrent {job.qbt_hash} not found in qBittorrent")
+        self._ensure_job_can_track_torrent(db, job, torrent)
 
         qbt_state = getattr(torrent, "state", None)
         self._sync_job_from_torrent(job, torrent)
@@ -575,7 +637,7 @@ class JobService:
     def _evaluate_staging_now(self, db: Session, job: Job) -> None:
         if not job.qbt_hash:
             return
-        torrent = self.qbt.get_torrent(job.qbt_hash)
+        torrent = self._find_live_torrent_for_job(job)
         if torrent is None:
             return
         self._sync_job_from_torrent(job, torrent)
@@ -796,7 +858,7 @@ class JobService:
 
     def _scan_and_finalize(self, job: Job) -> None:
         if not job.content_path:
-            torrent = self.qbt.get_torrent(job.qbt_hash)
+            torrent = self._find_live_torrent_for_job(job)
             job.content_path = getattr(torrent, "content_path", None) or job.content_path
         if not job.content_path:
             raise RuntimeError("content_path is not available for completed torrent")
