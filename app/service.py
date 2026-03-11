@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 from uuid import uuid4
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from .config import get_settings
 from .models import Job
@@ -37,33 +38,21 @@ class JobService:
                 )
             )
 
-        job_id = str(uuid4())
-        unique_tag = f"ti_job_{uuid4().hex[:12]}"
         staging_root = self._root_for_preference(staging_preference)
-
-        job = Job(
-            id=job_id,
+        job = self._create_job_record(
+            db,
             magnet_uri=magnet_uri,
             final_parent=final_parent,
             final_category=final_category,
             staging_preference=staging_preference,
-            staging_actual=staging_preference,
-            staging_root_initial=staging_root,
-            staging_root_actual=staging_root,
-            managed_tag=self.settings.managed_tag,
-            unique_tag=unique_tag,
-            state="adding_to_qbt",
-            updated_at=datetime.utcnow(),
+            staging_root=staging_root,
         )
-        db.add(job)
-        db.commit()
-        db.refresh(job)
 
         try:
             self.qbt.add_torrent(
                 magnet_uri=magnet_uri,
                 save_path=staging_root,
-                tags=[self.settings.managed_tag, unique_tag],
+                tags=[self.settings.managed_tag, job.unique_tag],
                 category=self.settings.intake_category,
             )
             self._resolve_hash_for_job(db, job)
@@ -87,6 +76,65 @@ class JobService:
             db.commit()
             raise RuntimeError(f"Failed to submit to qBittorrent: {error_text}") from exc
         return job
+
+    def _create_job_record(
+        self,
+        db: Session,
+        *,
+        magnet_uri: str,
+        final_parent: str,
+        final_category: str | None,
+        staging_preference: str,
+        staging_root: str,
+    ) -> Job:
+        last_exc: Exception | None = None
+        for _ in range(5):
+            job = Job(
+                id=str(uuid4()),
+                magnet_uri=magnet_uri,
+                final_parent=final_parent,
+                final_category=final_category,
+                staging_preference=staging_preference,
+                staging_actual=staging_preference,
+                staging_root_initial=staging_root,
+                staging_root_actual=staging_root,
+                managed_tag=self.settings.managed_tag,
+                unique_tag=self._generate_unique_tag(db),
+                state="adding_to_qbt",
+                updated_at=datetime.utcnow(),
+            )
+            db.add(job)
+            try:
+                db.commit()
+                db.refresh(job)
+                return job
+            except IntegrityError as exc:
+                db.rollback()
+                last_exc = exc
+                self.logger.warning("Retrying job record creation after unique constraint collision")
+        raise RuntimeError("Failed to allocate a unique intake tag after multiple attempts") from last_exc
+
+    def _generate_unique_tag(self, db: Session) -> str:
+        reserved_tags = self._reserved_unique_tags(db)
+        for _ in range(20):
+            candidate = f"ti_job_{uuid4().hex[:12]}"
+            if candidate not in reserved_tags:
+                return candidate
+        raise RuntimeError("Failed to generate a unique intake tag after multiple attempts")
+
+    def _reserved_unique_tags(self, db: Session) -> set[str]:
+        db_tags = {
+            tag for tag in db.scalars(select(Job.unique_tag))
+            if isinstance(tag, str) and tag.startswith("ti_job_")
+        }
+        qbt_tags: set[str] = set()
+        for torrent in self.qbt.list_torrents():
+            torrent_tags = getattr(torrent, "tags", "") or ""
+            for tag in torrent_tags.split(","):
+                normalized = tag.strip()
+                if normalized.startswith("ti_job_"):
+                    qbt_tags.add(normalized)
+        return db_tags | qbt_tags
 
     def retry_job(self, db: Session, *, job_id: str) -> Job:
         job = db.get(Job, job_id)
