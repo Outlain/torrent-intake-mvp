@@ -172,6 +172,7 @@ After that it pauses the torrent, scans content, and only then promotes and resu
   - with `TI_LOCAL_OVERFLOW_POLICY=queue`, the job is paused in `waiting_for_local_space` and resumes automatically when space becomes available
   - with `TI_LOCAL_OVERFLOW_POLICY=nas`, the job is moved to NAS staging automatically
 - Operators can also manually move queued `waiting_for_local_space` jobs to NAS from the Recent Jobs toolbar.
+- On worker startup, intake logs a one-time local staging diagnostic summary showing filesystem totals, current local torrent reservations, and per-torrent local staging usage.
 - This decision uses qBittorrent metadata and remaining bytes only; the intake app does not query the public internet for torrent size.
 
 ## qBittorrent Completion Hook

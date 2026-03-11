@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timedelta
 import logging
+import os
 from pathlib import Path
 import shutil
 from uuid import uuid4
@@ -254,6 +255,66 @@ class JobService:
             if not raw_prefix or suggestion.lower().startswith(raw_prefix.lower())
         }
         return sorted(filtered_suggestions or suggestions)[:50]
+
+    def log_local_staging_diagnostics(self, db: Session) -> None:
+        disk = shutil.disk_usage(self.settings.local_staging_root)
+        safe_free_bytes = max(disk.free - self.settings.local_free_space_buffer_bytes, 0)
+        directory_tree_bytes = self._directory_tree_size(self.settings.local_staging_root)
+        all_torrents = self.qbt.list_torrents()
+        local_torrents = [torrent for torrent in all_torrents if self._torrent_uses_local_staging(torrent)]
+        local_intake_jobs = list(
+            db.scalars(
+                select(Job)
+                .where(Job.is_terminal == False)
+                .where(Job.staging_preference == "local")
+                .order_by(Job.created_at.asc())
+            )
+        )
+        queued_local_jobs = [job for job in local_intake_jobs if job.state == "waiting_for_local_space"]
+        active_local_jobs = [job for job in local_intake_jobs if job.staging_actual == "local"]
+        total_remaining_local_bytes = sum(
+            max(self._remaining_bytes_for_torrent(torrent) or 0, 0)
+            for torrent in local_torrents
+        )
+
+        self.logger.info(
+            "Local staging startup diagnostics root=%s filesystem_total=%s filesystem_used=%s filesystem_free=%s "
+            "safe_free=%s tree_bytes=%s local_torrents=%s intake_local_jobs=%s queued_local_jobs=%s "
+            "remaining_local_bytes=%s",
+            self.settings.local_staging_root,
+            self._format_bytes(disk.total),
+            self._format_bytes(disk.used),
+            self._format_bytes(disk.free),
+            self._format_bytes(safe_free_bytes),
+            self._format_bytes(directory_tree_bytes),
+            len(local_torrents),
+            len(active_local_jobs),
+            len(queued_local_jobs),
+            self._format_bytes(total_remaining_local_bytes),
+        )
+
+        for torrent in local_torrents:
+            torrent_hash = getattr(torrent, "hash", "") or ""
+            total_size = getattr(torrent, "size", None) or getattr(torrent, "total_size", None) or 0
+            remaining_bytes = max(self._remaining_bytes_for_torrent(torrent, fallback_size_bytes=total_size) or 0, 0)
+            downloaded_bytes = max(total_size - remaining_bytes, 0) if total_size else 0
+            progress = float(getattr(torrent, "progress", 0) or 0) * 100
+            fs_share_pct = (downloaded_bytes / disk.total * 100) if disk.total > 0 else 0.0
+            total_share_pct = (total_size / disk.total * 100) if disk.total > 0 and total_size > 0 else 0.0
+            self.logger.info(
+                "Local staging torrent hash=%s name=%r state=%s progress=%.2f%% downloaded=%s remaining=%s "
+                "total=%s current_fs_share=%.3f%% full_fs_share=%.3f%% save_path=%s",
+                torrent_hash[:12] or "-",
+                getattr(torrent, "name", None) or "unknown",
+                getattr(torrent, "state", None) or "unknown",
+                progress,
+                self._format_bytes(downloaded_bytes),
+                self._format_bytes(remaining_bytes),
+                self._format_bytes(total_size),
+                fs_share_pct,
+                total_share_pct,
+                getattr(torrent, "save_path", None) or "-",
+            )
 
     def _root_for_preference(self, preference: str) -> str:
         return self.settings.local_staging_root if preference == "local" else self.settings.nas_staging_root
@@ -538,6 +599,33 @@ class JobService:
         if progress >= 1.0:
             return 0
         return max(int(total_size * (1.0 - progress)), 0)
+
+    def _directory_tree_size(self, root_path: str) -> int:
+        total_bytes = 0
+        for current_root, _, filenames in os.walk(root_path):
+            for filename in filenames:
+                file_path = os.path.join(current_root, filename)
+                try:
+                    if os.path.islink(file_path):
+                        continue
+                    total_bytes += os.path.getsize(file_path)
+                except OSError:
+                    continue
+        return total_bytes
+
+    @staticmethod
+    def _format_bytes(value: int | None) -> str:
+        if value is None:
+            return "-"
+        units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
+        size = float(value)
+        unit_index = 0
+        while size >= 1024 and unit_index < len(units) - 1:
+            size /= 1024
+            unit_index += 1
+        if unit_index == 0:
+            return f"{int(size)} {units[unit_index]}"
+        return f"{size:.2f} {units[unit_index]}"
 
     def _path_within_local_staging(self, path_value: str | None) -> bool:
         if not path_value:
