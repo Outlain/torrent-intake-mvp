@@ -365,6 +365,60 @@ class JobService:
                 getattr(torrent, "save_path", None) or "-",
             )
 
+    def enrich_jobs_with_live_stats(self, jobs: list[Job]) -> list[Job]:
+        for job in jobs:
+            job.progress = None
+            job.eta_seconds = None
+            job.download_speed_bytes_per_s = None
+            job.activity_summary = None
+
+        if not jobs:
+            return jobs
+
+        try:
+            torrents = self.qbt.list_torrents()
+        except Exception as exc:
+            self.logger.warning("Unable to enrich jobs with live qB stats: %s", exc)
+            return jobs
+
+        torrents_by_hash: dict[str, object] = {}
+        torrents_by_unique_tag: dict[str, object] = {}
+        for torrent in torrents:
+            torrent_hash = getattr(torrent, "hash", None)
+            if torrent_hash:
+                torrents_by_hash[torrent_hash] = torrent
+            torrent_tags = getattr(torrent, "tags", "") or ""
+            for tag in torrent_tags.split(","):
+                normalized = tag.strip()
+                if normalized.startswith("ti_job_"):
+                    torrents_by_unique_tag[normalized] = torrent
+
+        for job in jobs:
+            torrent = None
+            if job.qbt_hash:
+                torrent = torrents_by_hash.get(job.qbt_hash)
+            if torrent is None and job.unique_tag:
+                torrent = torrents_by_unique_tag.get(job.unique_tag)
+            if torrent is None:
+                continue
+
+            progress = getattr(torrent, "progress", None)
+            if isinstance(progress, (int, float)):
+                job.progress = float(progress)
+
+            eta_seconds = getattr(torrent, "eta", None)
+            if isinstance(eta_seconds, int) and eta_seconds >= 0:
+                job.eta_seconds = eta_seconds
+
+            download_speed = getattr(torrent, "dlspeed", None)
+            if download_speed is None:
+                download_speed = getattr(torrent, "dl_speed", None)
+            if isinstance(download_speed, int) and download_speed >= 0:
+                job.download_speed_bytes_per_s = download_speed
+
+            job.activity_summary = self._build_activity_summary(job, torrent)
+        return jobs
+
     def _root_for_preference(self, preference: str) -> str:
         return self.settings.local_staging_root if preference == "local" else self.settings.nas_staging_root
 
@@ -736,6 +790,48 @@ class JobService:
         if unit_index == 0:
             return f"{int(size)} {units[unit_index]}"
         return f"{size:.2f} {units[unit_index]}"
+
+    @staticmethod
+    def _format_eta(seconds: int | None) -> str | None:
+        if seconds is None or seconds < 0:
+            return None
+        if seconds >= 8640000:
+            return "infinite"
+        days, remainder = divmod(seconds, 86400)
+        hours, remainder = divmod(remainder, 3600)
+        minutes, secs = divmod(remainder, 60)
+        parts: list[str] = []
+        if days:
+            parts.append(f"{days}d")
+        if hours:
+            parts.append(f"{hours}h")
+        if minutes:
+            parts.append(f"{minutes}m")
+        if secs and not parts:
+            parts.append(f"{secs}s")
+        if not parts:
+            return "0s"
+        return " ".join(parts[:2])
+
+    def _build_activity_summary(self, job: Job, torrent) -> str | None:
+        qbt_state = getattr(torrent, "state", None) or job.last_seen_qbt_state or job.state
+        is_complete = isinstance(job.progress, float) and job.progress >= 1.0
+        upload_states = {"uploading", "stalledUP", "forcedUP", "pausedUP", "queuedUP"}
+        parts: list[str] = []
+        if isinstance(job.progress, float):
+            parts.append(f"{job.progress * 100:.2f}%")
+        if isinstance(job.download_speed_bytes_per_s, int) and not is_complete:
+            parts.append(f"{self._format_bytes(job.download_speed_bytes_per_s)}/s")
+        eta_text = self._format_eta(job.eta_seconds) if not is_complete else None
+        if eta_text:
+            parts.append(f"ETA {eta_text}")
+        if is_complete and qbt_state in upload_states:
+            parts.append("Seeding")
+        if parts:
+            return " | ".join(parts)
+        if qbt_state:
+            return str(qbt_state)
+        return None
 
     def _path_within_local_staging(self, path_value: str | None) -> bool:
         if not path_value:

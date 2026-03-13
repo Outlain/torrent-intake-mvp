@@ -65,7 +65,7 @@ def health() -> dict[str, str]:
 @app.get("/jobs", response_model=list[JobOut])
 def list_jobs(db: Session = Depends(get_db)):
     jobs = list(db.scalars(select(Job).order_by(Job.created_at.desc())))
-    return jobs
+    return service.enrich_jobs_with_live_stats(jobs)
 
 
 @app.post("/jobs", response_model=JobOut)
@@ -238,6 +238,7 @@ def qbt_complete_event_form(
 @app.get("/ui", response_class=HTMLResponse)
 def ui(request: Request, db: Session = Depends(get_db)):
     jobs = list(db.scalars(select(Job).order_by(Job.created_at.desc()).limit(50)))
+    jobs = service.enrich_jobs_with_live_stats(jobs)
     return TEMPLATES.TemplateResponse(
         request,
         "index.html",

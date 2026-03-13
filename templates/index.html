@@ -485,6 +485,14 @@
       max-width: 460px;
     }
 
+    .activity-error {
+      color: var(--danger);
+    }
+
+    .activity-detail {
+      color: var(--muted);
+    }
+
     .state-pill {
       display: inline-flex;
       align-items: center;
@@ -776,7 +784,7 @@
                 <th class="cell-final-parent">Final Parent</th>
                 <th class="cell-stage">Stage</th>
                 <th class="cell-hash">Hash</th>
-                <th class="cell-last-error">Last Error</th>
+                <th class="cell-last-error">Activity / Error</th>
               </tr>
             </thead>
             <tbody id="jobs-tbody">
@@ -789,7 +797,7 @@
                 <td class="mono cell-final-parent">{{ job.final_parent }}</td>
                 <td class="cell-stage">{{ job.staging_actual or job.staging_preference }}</td>
                 <td class="mono cell-hash">{{ job.qbt_hash or '-' }}</td>
-                <td class="cell-last-error">{{ job.last_error or '-' }}</td>
+                <td class="cell-last-error{% if job.last_error %} activity-error{% endif %}">{{ job.last_error or job.activity_summary or '-' }}</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -912,6 +920,19 @@
       return td;
     }
 
+    function createActivityCell(job) {
+      const td = document.createElement('td');
+      td.className = 'cell-last-error';
+      const value = job.last_error || job.activity_summary || '-';
+      if (job.last_error) {
+        td.classList.add('activity-error');
+      } else if (job.activity_summary) {
+        td.classList.add('activity-detail');
+      }
+      td.textContent = value;
+      return td;
+    }
+
     function compareJobsByCreatedAt(left, right) {
       const leftMs = new Date(left.created_at || 0).getTime();
       const rightMs = new Date(right.created_at || 0).getTime();
@@ -996,7 +1017,7 @@
         row.appendChild(createCell(job.final_parent, 'mono cell-final-parent'));
         row.appendChild(createCell(job.staging_actual || job.staging_preference, 'cell-stage'));
         row.appendChild(createCell(job.qbt_hash, 'mono cell-hash'));
-        row.appendChild(createCell(job.last_error, 'cell-last-error'));
+        row.appendChild(createActivityCell(job));
         jobsTbody.appendChild(row);
       });
 

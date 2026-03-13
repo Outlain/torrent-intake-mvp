@@ -58,6 +58,10 @@ class JobOut(BaseModel):
     last_seen_qbt_state: str | None
     threat_name: str | None
     last_error: str | None
+    progress: float | None = None
+    eta_seconds: int | None = None
+    download_speed_bytes_per_s: int | None = None
+    activity_summary: str | None = None
 
     model_config = {"from_attributes": True}
 
