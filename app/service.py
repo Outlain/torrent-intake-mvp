@@ -370,6 +370,7 @@ class JobService:
             job.progress = None
             job.eta_seconds = None
             job.download_speed_bytes_per_s = None
+            job.upload_speed_bytes_per_s = None
             job.activity_summary = None
 
         if not jobs:
@@ -415,6 +416,12 @@ class JobService:
                 download_speed = getattr(torrent, "dl_speed", None)
             if isinstance(download_speed, int) and download_speed >= 0:
                 job.download_speed_bytes_per_s = download_speed
+
+            upload_speed = getattr(torrent, "upspeed", None)
+            if upload_speed is None:
+                upload_speed = getattr(torrent, "up_speed", None)
+            if isinstance(upload_speed, int) and upload_speed >= 0:
+                job.upload_speed_bytes_per_s = upload_speed
 
             job.activity_summary = self._build_activity_summary(job, torrent)
         return jobs
@@ -827,6 +834,8 @@ class JobService:
             parts.append(f"ETA {eta_text}")
         if is_complete and qbt_state in upload_states:
             parts.append("Seeding")
+        if is_complete and isinstance(job.upload_speed_bytes_per_s, int) and job.upload_speed_bytes_per_s > 0:
+            parts.append(f"Up {self._format_bytes(job.upload_speed_bytes_per_s)}/s")
         if parts:
             return " | ".join(parts)
         if qbt_state:

@@ -61,6 +61,7 @@ class JobOut(BaseModel):
     progress: float | None = None
     eta_seconds: int | None = None
     download_speed_bytes_per_s: int | None = None
+    upload_speed_bytes_per_s: int | None = None
     activity_summary: str | None = None
 
     model_config = {"from_attributes": True}
