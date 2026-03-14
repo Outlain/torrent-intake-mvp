@@ -4,6 +4,8 @@ import logging
 import os
 from pathlib import Path
 import shutil
+import threading
+import time
 from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -13,6 +15,9 @@ from .models import Job
 from .qbt import QbtService, TorrentAlreadyExistsError
 from .scanner import ScannerService
 from .telegram import TelegramService
+
+_ACTIVE_LONG_RUNNING_JOBS: set[str] = set()
+_ACTIVE_LONG_RUNNING_JOBS_LOCK = threading.Lock()
 
 
 class JobService:
@@ -737,8 +742,18 @@ class JobService:
             job.completion_event_received_at
             and datetime.utcnow() >= job.completion_event_received_at + timedelta(seconds=self.settings.completion_grace_seconds)
         )
-        if (job.download_complete_at and job.state in {"download_complete", "completion_event_received", "downloading"}) and (event_ready or not job.completion_event_received_at):
-            self._scan_and_finalize(job)
+        if (job.download_complete_at and job.state in {"download_complete", "completion_event_received", "downloading", "scanning"}) and (event_ready or not job.completion_event_received_at):
+            if not self._try_acquire_long_running_job(job.id):
+                self.logger.info("Skipping duplicate scan/finalize attempt for job %s state=%s", job.id, job.state)
+                return
+            try:
+                self._mark(job, "scanning")
+                db.add(job)
+                db.commit()
+                db.refresh(job)
+                self._scan_and_finalize(job)
+            finally:
+                self._release_long_running_job(job.id)
 
         db.add(job)
         db.commit()
@@ -841,6 +856,17 @@ class JobService:
         if qbt_state:
             return str(qbt_state)
         return None
+
+    def _try_acquire_long_running_job(self, job_id: str) -> bool:
+        with _ACTIVE_LONG_RUNNING_JOBS_LOCK:
+            if job_id in _ACTIVE_LONG_RUNNING_JOBS:
+                return False
+            _ACTIVE_LONG_RUNNING_JOBS.add(job_id)
+            return True
+
+    def _release_long_running_job(self, job_id: str) -> None:
+        with _ACTIVE_LONG_RUNNING_JOBS_LOCK:
+            _ACTIVE_LONG_RUNNING_JOBS.discard(job_id)
 
     def _path_within_local_staging(self, path_value: str | None) -> bool:
         if not path_value:
@@ -1017,10 +1043,18 @@ class JobService:
             raise RuntimeError("content_path is not available for completed torrent")
 
         self.qbt.pause(job.qbt_hash)
-        self._mark(job, "scanning")
         self.logger.info("Scanning job %s path=%s", job.id, job.content_path)
+        scan_started = time.monotonic()
         result = self.scanner.scan_path(job.content_path)
+        scan_duration_seconds = time.monotonic() - scan_started
         job.scan_completed_at = datetime.utcnow()
+        self.logger.info(
+            "Scan finished for job %s clean=%s infected=%s duration_seconds=%.2f",
+            job.id,
+            result.clean,
+            result.infected,
+            scan_duration_seconds,
+        )
 
         if result.infected:
             threat = result.threat_name or "unknown"
