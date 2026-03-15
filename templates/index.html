@@ -52,8 +52,76 @@
       margin-bottom: 0;
     }
 
+    .hero-details {
+      overflow: hidden;
+    }
+
+    .hero-details[open] .hero-copy {
+      display: block;
+    }
+
     .hero-copy {
       padding: 28px 30px 24px;
+    }
+
+    .hero-mobile-summary {
+      display: none;
+      list-style: none;
+      cursor: pointer;
+      padding: 18px 20px;
+    }
+
+    .hero-mobile-summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .hero-mobile-summary-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .hero-mobile-summary-text {
+      min-width: 0;
+    }
+
+    .hero-mobile-summary .eyebrow {
+      margin-bottom: 10px;
+    }
+
+    .hero-mobile-summary-title {
+      margin: 0;
+      font-size: 1.35rem;
+      letter-spacing: -0.03em;
+    }
+
+    .hero-mobile-summary-copy {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.4;
+    }
+
+    .hero-mobile-summary-icon {
+      flex: 0 0 auto;
+      width: 38px;
+      height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--muted);
+      font-size: 1rem;
+      transition: transform 160ms ease, color 160ms ease, border-color 160ms ease;
+    }
+
+    .hero-details[open] .hero-mobile-summary-icon {
+      transform: rotate(180deg);
+      color: var(--ink);
+      border-color: rgba(222, 125, 54, 0.32);
     }
 
     .eyebrow {
@@ -159,6 +227,97 @@
       color: var(--muted);
       font-size: 0.82rem;
       line-height: 1.4;
+    }
+
+    .combo-field {
+      position: relative;
+    }
+
+    .combo-input {
+      padding-right: 52px;
+    }
+
+    .combo-toggle {
+      position: absolute;
+      top: 50%;
+      right: 10px;
+      transform: translateY(-50%);
+      width: 34px;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+    }
+
+    .combo-toggle:hover,
+    .combo-toggle:focus-visible {
+      background: rgba(255, 255, 255, 0.09);
+      border-color: rgba(222, 125, 54, 0.32);
+      color: var(--ink);
+      outline: none;
+    }
+
+    .combo-field[data-open="true"] .combo-toggle {
+      color: var(--ink);
+      border-color: rgba(222, 125, 54, 0.32);
+      transform: translateY(-50%) rotate(180deg);
+    }
+
+    .combo-menu {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      right: 0;
+      z-index: 20;
+      display: grid;
+      gap: 6px;
+      padding: 10px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(8, 14, 23, 0.98);
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.38);
+      max-height: 240px;
+      overflow-y: auto;
+    }
+
+    .combo-menu[hidden] {
+      display: none;
+    }
+
+    .combo-option,
+    .combo-empty {
+      width: 100%;
+      padding: 11px 12px;
+      border-radius: 14px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--ink);
+      text-align: left;
+      line-height: 1.35;
+    }
+
+    .combo-option {
+      cursor: pointer;
+      transition: background 140ms ease, border-color 140ms ease;
+    }
+
+    .combo-option:hover,
+    .combo-option:focus-visible,
+    .combo-option[aria-selected="true"] {
+      background: rgba(222, 125, 54, 0.1);
+      border-color: rgba(222, 125, 54, 0.24);
+      outline: none;
+    }
+
+    .combo-empty {
+      color: var(--muted);
+      font-size: 0.88rem;
     }
 
     input,
@@ -560,6 +719,14 @@
         padding: 18px;
       }
 
+      .hero-mobile-summary {
+        display: block;
+      }
+
+      .hero-details:not([open]) .hero-copy {
+        display: none;
+      }
+
       .meta-grid,
       .field-grid {
         grid-template-columns: 1fr;
@@ -573,6 +740,12 @@
       .button-primary,
       .button-secondary {
         width: 100%;
+      }
+
+      .combo-menu {
+        position: static;
+        margin-top: 8px;
+        max-height: 220px;
       }
 
       table {
@@ -633,12 +806,29 @@
         grid-template-columns: 1fr;
       }
     }
+
+    @media (min-width: 721px) {
+      .hero-mobile-summary {
+        display: none;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="shell">
     <div class="top-layout">
-      <section class="hero panel hero-copy">
+      <details id="hero-details" class="hero hero-details panel" open>
+        <summary class="hero-mobile-summary">
+          <div class="hero-mobile-summary-row">
+            <div class="hero-mobile-summary-text">
+              <div class="eyebrow">Torrent Intake Control Plane</div>
+              <h2 class="hero-mobile-summary-title">{{ title }}</h2>
+              <p class="hero-mobile-summary-copy">Tap to view the current staging roots, overflow policy, and environment summary.</p>
+            </div>
+            <span class="hero-mobile-summary-icon" aria-hidden="true">⌄</span>
+          </div>
+        </summary>
+        <section class="hero-copy">
           <div class="eyebrow">Torrent Intake Control Plane</div>
           <h1>{{ title }}</h1>
           <p class="lede">
@@ -681,7 +871,8 @@
               <span class="meta-value">{{ settings.local_free_space_buffer_gib }} GiB</span>
             </div>
           </div>
-      </section>
+        </section>
+      </details>
 
       <div class="panel form-panel">
         <h2 class="section-title">New Intake</h2>
@@ -712,7 +903,21 @@
 
             <label class="field">
               <span>Final Category</span>
-              <input id="final-category-input" type="text" name="final_category" list="category-suggestions" placeholder="Movies" autocomplete="off">
+              <div id="final-category-combo" class="combo-field" data-open="false">
+                <input
+                  id="final-category-input"
+                  class="combo-input"
+                  type="text"
+                  name="final_category"
+                  placeholder="Movies"
+                  autocomplete="off"
+                  autocapitalize="none"
+                  aria-autocomplete="list"
+                  aria-expanded="false"
+                  aria-controls="category-menu">
+                <button id="final-category-toggle" class="combo-toggle" type="button" aria-label="Show existing category suggestions">⌄</button>
+                <div id="category-menu" class="combo-menu" role="listbox" hidden></div>
+              </div>
               <span class="hint">Optional. Existing qB categories are suggested and missing categories can be auto-created if enabled.</span>
             </label>
 
@@ -734,7 +939,6 @@
         </form>
 
         <datalist id="final-parent-suggestions"></datalist>
-        <datalist id="category-suggestions"></datalist>
       </div>
     </div>
 
@@ -807,7 +1011,12 @@
   </div>
 
   <script>
+    const heroDetails = document.getElementById('hero-details');
     const finalParentInput = document.getElementById('final-parent-input');
+    const finalCategoryInput = document.getElementById('final-category-input');
+    const finalCategoryCombo = document.getElementById('final-category-combo');
+    const finalCategoryToggle = document.getElementById('final-category-toggle');
+    const categoryMenu = document.getElementById('category-menu');
     const magnetInput = document.getElementById('magnet-input');
     const formStatus = document.getElementById('form-status');
     const submitButton = document.getElementById('submit-button');
@@ -826,6 +1035,7 @@
     const defaultFinalParentPrefix = finalParentInput.dataset.defaultPrefix || '/downloads';
 
     let knownFinalPaths = [];
+    let knownCategories = [];
     let latestJobs = [];
     let selectedJobIds = new Set();
     let jobsSortOrder = 'newest';
@@ -833,6 +1043,8 @@
     let finalPathTimer = null;
     let jobsRefreshTimer = null;
     let jobsRequestInFlight = false;
+    let categoryMenuJustSelected = false;
+    const mobileHeroMediaQuery = window.matchMedia('(max-width: 720px)');
 
     function normalizedDefaultPrefix(prefix) {
       return prefix.endsWith('/') ? prefix : `${prefix}/`;
@@ -887,6 +1099,79 @@
 
       const text = await response.text();
       return text || `HTTP ${response.status}`;
+    }
+
+    function syncHeroDetailsForViewport() {
+      heroDetails.open = !mobileHeroMediaQuery.matches;
+    }
+
+    function sortedUnique(values) {
+      return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
+    }
+
+    function filterCategories(rawQuery) {
+      const query = (rawQuery || '').trim().toLowerCase();
+      if (!query) return knownCategories.slice(0, 24);
+
+      const startsWith = [];
+      const includes = [];
+      knownCategories.forEach((category) => {
+        const lowered = category.toLowerCase();
+        if (lowered.startsWith(query)) {
+          startsWith.push(category);
+        } else if (lowered.includes(query)) {
+          includes.push(category);
+        }
+      });
+      return [...startsWith, ...includes].slice(0, 24);
+    }
+
+    function closeCategoryMenu() {
+      finalCategoryCombo.dataset.open = 'false';
+      finalCategoryInput.setAttribute('aria-expanded', 'false');
+      categoryMenu.hidden = true;
+      categoryMenu.innerHTML = '';
+    }
+
+    function chooseCategory(value) {
+      finalCategoryInput.value = value;
+      closeCategoryMenu();
+      window.setTimeout(() => {
+        categoryMenuJustSelected = false;
+      }, 0);
+    }
+
+    function openCategoryMenu({ showAll = false } = {}) {
+      const matches = filterCategories(showAll ? '' : finalCategoryInput.value);
+      finalCategoryCombo.dataset.open = 'true';
+      finalCategoryInput.setAttribute('aria-expanded', 'true');
+      categoryMenu.hidden = false;
+      categoryMenu.innerHTML = '';
+
+      if (matches.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'combo-empty';
+        empty.textContent = knownCategories.length === 0
+          ? 'No existing qB categories were returned. Keep typing to create one.'
+          : 'No matching existing categories. Keep typing to create a new one.';
+        categoryMenu.appendChild(empty);
+        return;
+      }
+
+      matches.forEach((category) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'combo-option';
+        button.setAttribute('role', 'option');
+        button.setAttribute('aria-selected', String(category === finalCategoryInput.value));
+        button.textContent = category;
+        button.addEventListener('pointerdown', (event) => {
+          event.preventDefault();
+          categoryMenuJustSelected = true;
+          chooseCategory(category);
+        });
+        categoryMenu.appendChild(button);
+      });
     }
 
     function createCell(text, className = '') {
@@ -1029,8 +1314,10 @@
         const categoriesRes = await fetch('/qbt/categories');
         if (!categoriesRes.ok) return;
         const data = await categoriesRes.json();
-        const categories = Array.isArray(data.categories) ? data.categories : [];
-        replaceOptions('category-suggestions', categories);
+        knownCategories = sortedUnique(Array.isArray(data.categories) ? data.categories : []);
+        if (finalCategoryCombo.dataset.open === 'true') {
+          openCategoryMenu({ showAll: !finalCategoryInput.value.trim() });
+        }
       } catch (error) {}
     }
 
@@ -1123,6 +1410,7 @@
       event.preventDefault();
       setFormStatus('');
       submitButton.disabled = true;
+      closeCategoryMenu();
 
       const form = new FormData(event.target);
       const payload = Object.fromEntries(form.entries());
@@ -1153,6 +1441,37 @@
       finalPathTimer = setTimeout(loadFinalPathSuggestions, 140);
     });
     finalParentInput.addEventListener('focus', loadFinalPathSuggestions);
+    finalCategoryInput.addEventListener('focus', () => openCategoryMenu({ showAll: !finalCategoryInput.value.trim() }));
+    finalCategoryInput.addEventListener('input', () => openCategoryMenu());
+    finalCategoryInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeCategoryMenu();
+      }
+    });
+    finalCategoryInput.addEventListener('blur', () => {
+      window.setTimeout(() => {
+        if (categoryMenuJustSelected) {
+          categoryMenuJustSelected = false;
+          return;
+        }
+        if (!finalCategoryCombo.contains(document.activeElement)) {
+          closeCategoryMenu();
+        }
+      }, 0);
+    });
+    finalCategoryToggle.addEventListener('click', () => {
+      if (finalCategoryCombo.dataset.open === 'true') {
+        closeCategoryMenu();
+        return;
+      }
+      openCategoryMenu({ showAll: true });
+      finalCategoryInput.focus();
+    });
+    document.addEventListener('click', (event) => {
+      if (!finalCategoryCombo.contains(event.target)) {
+        closeCategoryMenu();
+      }
+    });
     refreshJobsButton.addEventListener('click', () => loadJobs());
     jobsSortSelect.addEventListener('change', () => {
       jobsSortOrder = jobsSortSelect.value;
@@ -1230,6 +1549,13 @@
         label: 'Clear failed',
       });
     });
+
+    syncHeroDetailsForViewport();
+    if (typeof mobileHeroMediaQuery.addEventListener === 'function') {
+      mobileHeroMediaQuery.addEventListener('change', syncHeroDetailsForViewport);
+    } else if (typeof mobileHeroMediaQuery.addListener === 'function') {
+      mobileHeroMediaQuery.addListener(syncHeroDetailsForViewport);
+    }
 
     Promise.all([loadCategories(), loadKnownFinalPaths()]).then(() => {
       loadFinalPathSuggestions();
