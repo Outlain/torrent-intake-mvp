@@ -284,6 +284,9 @@
       box-shadow: 0 20px 48px rgba(0, 0, 0, 0.38);
       max-height: 240px;
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      touch-action: pan-y;
     }
 
     .combo-menu[hidden] {
@@ -1043,7 +1046,6 @@
     let finalPathTimer = null;
     let jobsRefreshTimer = null;
     let jobsRequestInFlight = false;
-    let categoryMenuJustSelected = false;
     const mobileHeroMediaQuery = window.matchMedia('(max-width: 720px)');
 
     function normalizedDefaultPrefix(prefix) {
@@ -1136,9 +1138,6 @@
     function chooseCategory(value) {
       finalCategoryInput.value = value;
       closeCategoryMenu();
-      window.setTimeout(() => {
-        categoryMenuJustSelected = false;
-      }, 0);
     }
 
     function openCategoryMenu({ showAll = false } = {}) {
@@ -1165,9 +1164,7 @@
         button.setAttribute('role', 'option');
         button.setAttribute('aria-selected', String(category === finalCategoryInput.value));
         button.textContent = category;
-        button.addEventListener('pointerdown', (event) => {
-          event.preventDefault();
-          categoryMenuJustSelected = true;
+        button.addEventListener('click', () => {
           chooseCategory(category);
         });
         categoryMenu.appendChild(button);
@@ -1450,10 +1447,6 @@
     });
     finalCategoryInput.addEventListener('blur', () => {
       window.setTimeout(() => {
-        if (categoryMenuJustSelected) {
-          categoryMenuJustSelected = false;
-          return;
-        }
         if (!finalCategoryCombo.contains(document.activeElement)) {
           closeCategoryMenu();
         }
