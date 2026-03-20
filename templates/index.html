@@ -233,6 +233,10 @@
       position: relative;
     }
 
+    .combo-control {
+      position: relative;
+    }
+
     .combo-input {
       padding-right: 52px;
     }
@@ -907,18 +911,20 @@
             <label class="field">
               <span>Final Category</span>
               <div id="final-category-combo" class="combo-field" data-open="false">
-                <input
-                  id="final-category-input"
-                  class="combo-input"
-                  type="text"
-                  name="final_category"
-                  placeholder="Movies"
-                  autocomplete="off"
-                  autocapitalize="none"
-                  aria-autocomplete="list"
-                  aria-expanded="false"
-                  aria-controls="category-menu">
-                <button id="final-category-toggle" class="combo-toggle" type="button" aria-label="Show existing category suggestions">⌄</button>
+                <div class="combo-control">
+                  <input
+                    id="final-category-input"
+                    class="combo-input"
+                    type="text"
+                    name="final_category"
+                    placeholder="Movies"
+                    autocomplete="off"
+                    autocapitalize="none"
+                    aria-autocomplete="list"
+                    aria-expanded="false"
+                    aria-controls="category-menu">
+                  <button id="final-category-toggle" class="combo-toggle" type="button" aria-label="Show existing category suggestions">⌄</button>
+                </div>
                 <div id="category-menu" class="combo-menu" role="listbox" hidden></div>
               </div>
               <span class="hint">Optional. Existing qB categories are suggested and missing categories can be auto-created if enabled.</span>
